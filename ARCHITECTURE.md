@@ -78,7 +78,7 @@ Idea:
   - user_id: UUID (FK)
   - raw_text: str (生の意見)
   - formatted_text: str (LLM成形後)
-  - embedding: List[float] (384次元 - all-MiniLM-L6-v2 default)
+  - embedding: List[float] (768次元 - paraphrase-multilingual-mpnet-base-v2 default)
   - x: float (UMAP 2D x座標)
   - y: float (UMAP 2D y座標)
   - cluster_id: int
@@ -107,13 +107,13 @@ POST /api/ideas
     ↓
 LLM Service: 意見成形 (OpenAI/Ollama - .env設定)
     ↓
-Vectorization Service: Sentence Transformers (→ 384次元ベクトル)
+Vectorization Service: Sentence Transformers (→ 768次元ベクトル)
     ↓
 Database: Idea保存 (embedding含む)
     ↓
 Clustering Service:
     - 全アイディアのembeddingを取得
-    - UMAP: 384次元 → 2次元
+    - UMAP: 768次元 → 2次元
     - k-means: クラスタ割り当て
     - 凸包計算
     ↓
@@ -174,17 +174,18 @@ Server → All Clients: {"type": "scoreboard_update", "data": {...}}
 from sentence_transformers import SentenceTransformer
 
 # モデル読み込み (.env で指定可能)
-model_name = os.getenv('EMBEDDING_MODEL', 'sentence-transformers/all-MiniLM-L6-v2')
+model_name = os.getenv('EMBEDDING_MODEL', 'sentence-transformers/paraphrase-multilingual-mpnet-base-v2')
 model = SentenceTransformer(model_name)
 
-# テキストをベクトル化 (384次元)
+# テキストをベクトル化 (768次元)
 embedding = model.encode(formatted_text, convert_to_numpy=True)
 ```
 
 **推奨モデル:**
-- `all-MiniLM-L6-v2`: 軽量・高速、384次元
-- `paraphrase-multilingual-MiniLM-L12-v2`: 多言語対応、384次元
-- `all-mpnet-base-v2`: 高精度、768次元
+- `paraphrase-multilingual-mpnet-base-v2`: 高精度・多言語対応、768次元 (デフォルト)
+- `all-mpnet-base-v2`: 高精度・英語のみ、768次元
+- `intfloat/multilingual-e5-large`: 最高精度・多言語、1024次元
+- `all-MiniLM-L6-v2`: 軽量・高速、384次元 (低リソース環境向け)
 
 ### UMAP次元圧縮
 ```python
@@ -198,7 +199,7 @@ reducer = umap.UMAP(
     random_state=42
 )
 
-embeddings_2d = reducer.fit_transform(embeddings_384d)
+embeddings_2d = reducer.fit_transform(embeddings_768d)
 ```
 
 ### k-meansクラスタリング

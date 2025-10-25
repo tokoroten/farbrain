@@ -461,7 +461,7 @@ POST /api/ideas
 
 **処理フロー:**
 1. LLMで生の意見を成形 (OpenAI/Ollama - .env設定)
-2. Sentence Transformersでベクトル化 (384次元)
+2. Sentence Transformersでベクトル化 (768次元)
 3. UMAPで2次元圧縮
    - 10件未満: ランダム座標
    - 10件以上: UMAP transform適用
