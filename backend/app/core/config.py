@@ -14,22 +14,9 @@ class Settings(BaseSettings):
         case_sensitive=False,
     )
 
-    # LLM Provider
-    llm_provider: Literal["openai", "ollama"] = Field(
-        default="openai",
-        description="LLM provider to use for idea formatting"
-    )
-
-    # OpenAI Settings
+    # OpenAI Settings (for concurrent multi-user LLM requests)
     openai_api_key: str | None = Field(default=None, description="OpenAI API key")
     openai_model: str = Field(default="gpt-4", description="OpenAI model name")
-
-    # Ollama Settings
-    ollama_base_url: str = Field(
-        default="http://localhost:11434",
-        description="Ollama base URL"
-    )
-    ollama_model: str = Field(default="llama2", description="Ollama model name")
 
     # Embedding Model (Sentence Transformers)
     embedding_model: str = Field(
