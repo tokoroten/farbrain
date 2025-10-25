@@ -141,8 +141,8 @@ start_frontend.bat
 ### 5. アクセス
 
 - フロントエンド: http://localhost:5173
-- バックエンドAPI: http://localhost:8000
-- API ドキュメント: http://localhost:8000/docs
+- バックエンドAPI: http://localhost:8001
+- API ドキュメント: http://localhost:8001/docs
 
 ## 使い方
 
