@@ -34,7 +34,7 @@ async def register_user(
 
 @router.post("/{session_id}/join", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 async def join_session(
-    session_id: UUID,
+    session_id: str,
     join_data: SessionJoin,
     db: AsyncSession = Depends(get_db),
 ) -> UserResponse:
@@ -74,7 +74,7 @@ async def join_session(
     # Check if user already joined this session
     existing_user_result = await db.execute(
         select(User).where(
-            User.user_id == join_data.user_id,
+            User.user_id == str(join_data.user_id),
             User.session_id == session_id
         )
     )
@@ -102,7 +102,7 @@ async def join_session(
 
     # Create new session-specific user
     user = User(
-        user_id=join_data.user_id,
+        user_id=str(join_data.user_id),
         session_id=session_id,
         name=join_data.name,
         total_score=0.0,
@@ -134,8 +134,8 @@ async def join_session(
 
 @router.get("/{session_id}/{user_id}", response_model=UserResponse)
 async def get_user(
-    session_id: UUID,
-    user_id: UUID,
+    session_id: str,
+    user_id: str,
     db: AsyncSession = Depends(get_db),
 ) -> UserResponse:
     """Get user information in a specific session."""

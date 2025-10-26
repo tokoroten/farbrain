@@ -15,7 +15,7 @@ class ConnectionManager:
         # Maps session_id -> list of WebSocket connections
         self.active_connections: dict[str, list[WebSocket]] = {}
 
-    async def connect(self, websocket: WebSocket, session_id: UUID) -> None:
+    async def connect(self, websocket: WebSocket, session_id: str | UUID) -> None:
         """Accept a new WebSocket connection and add to session room."""
         await websocket.accept()
         session_key = str(session_id)
@@ -25,7 +25,7 @@ class ConnectionManager:
 
         self.active_connections[session_key].append(websocket)
 
-    def disconnect(self, websocket: WebSocket, session_id: UUID) -> None:
+    def disconnect(self, websocket: WebSocket, session_id: str | UUID) -> None:
         """Remove a WebSocket connection from session room."""
         session_key = str(session_id)
 
@@ -40,7 +40,7 @@ class ConnectionManager:
         """Send a message to a specific WebSocket connection."""
         await websocket.send_text(json.dumps(message))
 
-    async def broadcast_to_session(self, session_id: UUID, message: dict[str, Any]) -> None:
+    async def broadcast_to_session(self, session_id: str | UUID, message: dict[str, Any]) -> None:
         """Broadcast a message to all connections in a session."""
         session_key = str(session_id)
 
@@ -62,9 +62,9 @@ class ConnectionManager:
 
     async def send_idea_created(
         self,
-        session_id: UUID,
-        idea_id: UUID,
-        user_id: UUID,
+        session_id: str | UUID,
+        idea_id: str | UUID,
+        user_id: str | UUID,
         user_name: str,
         formatted_text: str,
         raw_text: str,
@@ -92,7 +92,7 @@ class ConnectionManager:
 
     async def send_coordinates_updated(
         self,
-        session_id: UUID,
+        session_id: str | UUID,
         updates: list[dict[str, Any]],
     ) -> None:
         """Broadcast coordinate updates (after UMAP recalculation)."""
@@ -104,7 +104,7 @@ class ConnectionManager:
 
     async def send_clusters_updated(
         self,
-        session_id: UUID,
+        session_id: str | UUID,
         clusters: list[dict[str, Any]],
     ) -> None:
         """Broadcast cluster updates (after clustering or labeling)."""
@@ -114,10 +114,21 @@ class ConnectionManager:
         }
         await self.broadcast_to_session(session_id, message)
 
+    async def send_clusters_recalculated(
+        self,
+        session_id: str | UUID,
+    ) -> None:
+        """Broadcast that clusters have been recalculated (full refresh needed)."""
+        message = {
+            "type": "clusters_recalculated",
+            "data": {},
+        }
+        await self.broadcast_to_session(session_id, message)
+
     async def send_user_joined(
         self,
-        session_id: UUID,
-        user_id: UUID,
+        session_id: str | UUID,
+        user_id: str | UUID,
         user_name: str,
     ) -> None:
         """Broadcast new user joining the session."""
@@ -132,7 +143,7 @@ class ConnectionManager:
 
     async def send_scoreboard_updated(
         self,
-        session_id: UUID,
+        session_id: str | UUID,
         rankings: list[dict[str, Any]],
     ) -> None:
         """Broadcast scoreboard updates."""
@@ -144,7 +155,7 @@ class ConnectionManager:
 
     async def send_session_status_changed(
         self,
-        session_id: UUID,
+        session_id: str | UUID,
         status: str,
         accepting_ideas: bool,
     ) -> None:

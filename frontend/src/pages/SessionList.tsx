@@ -56,10 +56,10 @@ export const SessionList = () => {
     <div style={{
       minHeight: '100vh',
       background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-      padding: '2rem',
+      padding: '1rem',
     }}>
       <div style={{
-        maxWidth: '1200px',
+        maxWidth: '1600px',
         margin: '0 auto',
       }}>
         <div style={{
@@ -67,32 +67,13 @@ export const SessionList = () => {
           padding: '2rem',
           borderRadius: '1rem',
           marginBottom: '2rem',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
         }}>
-          <div>
-            <h1 style={{ fontSize: '2rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>
-              セッション一覧
-            </h1>
-            <p style={{ color: '#666' }}>
-              ようこそ、{userName}さん
-            </p>
-          </div>
-          <button
-            onClick={() => navigate('/admin')}
-            style={{
-              padding: '0.75rem 1.5rem',
-              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-              color: 'white',
-              border: 'none',
-              borderRadius: '0.5rem',
-              cursor: 'pointer',
-              fontWeight: '600',
-            }}
-          >
-            新規セッション作成
-          </button>
+          <h1 style={{ fontSize: '2rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>
+            セッション一覧
+          </h1>
+          <p style={{ color: '#666' }}>
+            ようこそ、{userName}さん
+          </p>
         </div>
 
         <div style={{
@@ -156,10 +137,33 @@ export const SessionList = () => {
               padding: '3rem',
               borderRadius: '1rem',
               textAlign: 'center',
-              color: '#666',
               gridColumn: '1 / -1',
             }}>
-              セッションがありません
+              <p style={{ color: '#666', marginBottom: '1.5rem', fontSize: '1.1rem' }}>
+                セッションがまだ作成されていません
+              </p>
+              <button
+                onClick={() => navigate('/admin')}
+                style={{
+                  padding: '1rem 2rem',
+                  background: '#667eea',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '0.5rem',
+                  fontSize: '1rem',
+                  cursor: 'pointer',
+                  fontWeight: '600',
+                  transition: 'background 0.2s',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = '#5568d3';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = '#667eea';
+                }}
+              >
+                プロジェクトを作成（管理者）
+              </button>
             </div>
           ) : (
             sessions.map((session) => (
@@ -243,6 +247,7 @@ export const SessionList = () => {
                     borderRadius: '0.25rem',
                     fontSize: '0.875rem',
                     color: '#856404',
+                    marginBottom: '0.5rem',
                   }}>
                     現在アイディアを受付していません
                   </div>

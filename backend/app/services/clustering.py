@@ -48,6 +48,7 @@ class ClusteringService:
         n_neighbors: int | None = None,
         min_dist: float | None = None,
         random_state: int = 42,
+        fixed_cluster_count: int | None = None,
     ):
         """
         Initialize clustering service.
@@ -56,10 +57,12 @@ class ClusteringService:
             n_neighbors: UMAP n_neighbors parameter
             min_dist: UMAP min_dist parameter
             random_state: Random seed for reproducibility
+            fixed_cluster_count: Fixed number of clusters (None for automatic)
         """
         self.n_neighbors = n_neighbors or settings.umap_n_neighbors
         self.min_dist = min_dist or settings.umap_min_dist
         self.random_state = random_state
+        self.fixed_cluster_count = fixed_cluster_count
 
         self.umap_model: umap.UMAP | None = None
         self.kmeans_model: KMeans | None = None
@@ -69,6 +72,7 @@ class ClusteringService:
         Calculate optimal number of clusters.
 
         Uses cube root formula: max(5, ceil(n_ideas^(1/3)))
+        If fixed_cluster_count is set, uses that value instead.
 
         Args:
             n_ideas: Number of ideas
@@ -76,6 +80,10 @@ class ClusteringService:
         Returns:
             Number of clusters (minimum 5)
         """
+        # If fixed cluster count is set, use it
+        if self.fixed_cluster_count is not None:
+            return max(2, min(self.fixed_cluster_count, n_ideas))
+
         if n_ideas < settings.min_ideas_for_clustering:
             return 5  # Default minimum
 
@@ -151,6 +159,10 @@ class ClusteringService:
 
         # Case 2: Enough ideas for UMAP + k-means
         # UMAP dimensionality reduction
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info(f"[CLUSTERING] Creating new UMAP model (n_neighbors={self.n_neighbors}, min_dist={self.min_dist}) for {n_ideas} ideas")
+
         self.umap_model = umap.UMAP(
             n_components=2,
             n_neighbors=min(self.n_neighbors, n_ideas - 1),
@@ -159,7 +171,8 @@ class ClusteringService:
             random_state=self.random_state,
         )
 
-        coordinates = self.umap_model.fit_transform(embeddings)
+        coordinates = self.umap_model.fit_transform(embeddings).astype(np.float64)
+        logger.info(f"[CLUSTERING] UMAP model fitted successfully, model is now stored in ClusteringService instance")
 
         # K-means clustering
         n_clusters = self._calculate_n_clusters(n_ideas)
@@ -200,15 +213,21 @@ class ClusteringService:
         Raises:
             ValueError: If embedding dimension doesn't match
         """
+        import logging
+        logger = logging.getLogger(__name__)
+
         embedding = np.array(embedding).reshape(1, -1)
 
         if self.umap_model is None:
             # Not fitted yet, return random coordinates
+            logger.warning(f"[CLUSTERING] UMAP model is None! Returning random coordinates")
             coords = self._generate_random_coordinates(1)
             return float(coords[0, 0]), float(coords[0, 1])
 
         # Transform using fitted UMAP
-        coords = self.umap_model.transform(embedding)
+        logger.info(f"[CLUSTERING] Transforming embedding using fitted UMAP model (n_neighbors={self.n_neighbors}, min_dist={self.min_dist})")
+        coords = self.umap_model.transform(embedding).astype(np.float64)
+        logger.info(f"[CLUSTERING] Transformed coordinates: ({coords[0, 0]:.4f}, {coords[0, 1]:.4f})")
 
         return float(coords[0, 0]), float(coords[0, 1])
 
@@ -230,10 +249,37 @@ class ClusteringService:
         if self.kmeans_model is None:
             return 0
 
-        coords = np.array(coordinates).reshape(1, -1)
+        coords = np.array(coordinates, dtype=np.float64).reshape(1, -1)
         cluster_label = self.kmeans_model.predict(coords)
 
         return int(cluster_label[0])
+
+    def compute_convex_hull(
+        self,
+        coordinates: np.ndarray,
+    ) -> list[list[float]]:
+        """
+        Compute convex hull for a single cluster's coordinates.
+
+        Args:
+            coordinates: 2D coordinates, shape (n_points, 2)
+
+        Returns:
+            List of hull vertices [[x, y], ...]
+        """
+        # Need at least 3 points for convex hull
+        if len(coordinates) < 3:
+            # Use all points as hull vertices
+            return coordinates.tolist()
+
+        try:
+            # Compute convex hull
+            hull = ConvexHull(coordinates)
+            hull_vertices = coordinates[hull.vertices].tolist()
+            return hull_vertices
+        except Exception:
+            # Fallback: use all points if hull computation fails
+            return coordinates.tolist()
 
     def _compute_convex_hulls(
         self,
@@ -258,21 +304,7 @@ class ClusteringService:
             # Get points in this cluster
             mask = cluster_labels == label
             cluster_points = coordinates[mask]
-
-            # Need at least 3 points for convex hull
-            if len(cluster_points) < 3:
-                # Use all points as hull vertices
-                hulls[int(label)] = cluster_points.tolist()
-                continue
-
-            try:
-                # Compute convex hull
-                hull = ConvexHull(cluster_points)
-                hull_vertices = cluster_points[hull.vertices].tolist()
-                hulls[int(label)] = hull_vertices
-            except Exception:
-                # Fallback: use all points if hull computation fails
-                hulls[int(label)] = cluster_points.tolist()
+            hulls[int(label)] = self.compute_convex_hull(cluster_points)
 
         return hulls
 
@@ -316,46 +348,83 @@ class ClusteringService:
         return random.sample(cluster_idea_ids, sample_size)
 
 
-# Global service instance
-_clustering_service: ClusteringService | None = None
+# Session-specific clustering service cache
+# Maps session_id -> ClusteringService instance
+_clustering_services: dict[str, ClusteringService] = {}
 
 
-def get_clustering_service() -> ClusteringService:
+def get_clustering_service(session_id: str, fixed_cluster_count: int | None = None) -> ClusteringService:
     """
-    Get singleton clustering service instance.
+    Get or create clustering service instance for a specific session.
+
+    Args:
+        session_id: Session ID to get/create service for
+        fixed_cluster_count: Fixed number of clusters (None for automatic)
 
     Returns:
-        Cached ClusteringService instance
+        Cached ClusteringService instance for this session
     """
-    global _clustering_service
-    if _clustering_service is None:
-        _clustering_service = ClusteringService()
-    return _clustering_service
+    import logging
+    logger = logging.getLogger(__name__)
+
+    # 必ず表示されるログ
+    print(f"[DEBUG-PRINT] get_clustering_service called for session {session_id}")
+    logger.error(f"[DEBUG-ERROR] get_clustering_service called for session {session_id}")
+    print(f"[DEBUG-PRINT] clear_clustering_service keys : {_clustering_services.keys()}")
+    logger.error(f"[DEBUG-ERROR] clear_clustering_service keys : {_clustering_services.keys()}")
+
+    if session_id not in _clustering_services:
+        logger.info(f"[CLUSTERING-CACHE] Creating new ClusteringService for session {session_id}")
+        _clustering_services[session_id] = ClusteringService(fixed_cluster_count=fixed_cluster_count)
+    elif fixed_cluster_count is not None and _clustering_services[session_id].fixed_cluster_count != fixed_cluster_count:
+        # Update fixed_cluster_count if changed
+        logger.info(f"[CLUSTERING-CACHE] Updating fixed_cluster_count for session {session_id}")
+        _clustering_services[session_id].fixed_cluster_count = fixed_cluster_count
+    else:
+        logger.info(f"[CLUSTERING-CACHE] Returning cached ClusteringService for session {session_id}, UMAP model status: {'EXISTS' if _clustering_services[session_id].umap_model is not None else 'NONE'}")
+
+    return _clustering_services[session_id]
 
 
-def cluster_ideas(embeddings: list[list[float]]) -> ClusteringResult:
+def clear_clustering_service(session_id: str) -> None:
+    """
+    Clear cached clustering service for a session.
+
+    Call this when you want to force re-fitting UMAP model.
+
+    Args:
+        session_id: Session ID to clear cache for
+    """
+
+    if session_id in _clustering_services:
+        del _clustering_services[session_id]
+
+
+def cluster_ideas(embeddings: list[list[float]], session_id: str) -> ClusteringResult:
     """
     Convenience function to cluster ideas.
 
     Args:
         embeddings: List of embedding vectors
+        session_id: Session ID
 
     Returns:
         ClusteringResult
     """
-    service = get_clustering_service()
+    service = get_clustering_service(session_id)
     return service.fit_transform(embeddings)
 
 
-def transform_idea(embedding: list[float]) -> tuple[float, float]:
+def transform_idea(embedding: list[float], session_id: str) -> tuple[float, float]:
     """
-    Convenience function to transform single idea.
+    Convenience function to transform single idea using cached UMAP model.
 
     Args:
         embedding: Embedding vector
+        session_id: Session ID
 
     Returns:
         (x, y) coordinates
     """
-    service = get_clustering_service()
+    service = get_clustering_service(session_id)
     return service.transform(embedding)

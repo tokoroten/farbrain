@@ -2,7 +2,7 @@
  * Home page - User registration and name input
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useUserStore } from '../store/userStore';
 import { api } from '../lib/api';
@@ -13,6 +13,21 @@ export const Home = () => {
   const [name, setName] = useState(userName || '');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [backendConnected, setBackendConnected] = useState<boolean | null>(null);
+
+  // Check backend connection on mount
+  useEffect(() => {
+    const checkBackend = async () => {
+      try {
+        await api.health();
+        setBackendConnected(true);
+      } catch (err) {
+        console.error('Backend health check failed:', err);
+        setBackendConnected(false);
+      }
+    };
+    checkBackend();
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -59,9 +74,30 @@ export const Home = () => {
         padding: '3rem',
         borderRadius: '1rem',
         boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
-        maxWidth: '500px',
+        maxWidth: '600px',
         width: '90%',
+        margin: '0 auto',
       }}>
+        {/* Backend Connection Error */}
+        {backendConnected === false && (
+          <div style={{
+            padding: '0.75rem',
+            marginBottom: '1.5rem',
+            background: '#ffebee',
+            border: '1px solid #ffcdd2',
+            borderRadius: '0.5rem',
+            color: '#c62828',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.5rem',
+          }}>
+            <span style={{ fontSize: '1.2rem' }}>✗</span>
+            <span>
+              バックエンドに接続できません。サーバーが起動しているか確認してください。
+            </span>
+          </div>
+        )}
+
         <h1 style={{
           fontSize: '2.5rem',
           fontWeight: 'bold',

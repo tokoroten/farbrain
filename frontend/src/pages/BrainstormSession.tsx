@@ -32,6 +32,12 @@ export const BrainstormSession = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedIdea, setSelectedIdea] = useState<IdeaVisualization | null>(null);
+  const [hoveredIdeaId, setHoveredIdeaId] = useState<string | null>(null);
+  const [showAdminDialog, setShowAdminDialog] = useState(false);
+  const [adminPassword, setAdminPassword] = useState('');
+  const [clusteringInProgress, setClusteringInProgress] = useState(false);
+  const [clusterMode, setClusterMode] = useState<'auto' | 'fixed'>('auto');
+  const [fixedClusterCount, setFixedClusterCount] = useState('');
 
   // WebSocket connection
   const { isConnected } = useWebSocket({
@@ -51,6 +57,20 @@ export const BrainstormSession = () => {
     }
 
     fetchSessionData();
+
+    // Auto-refresh scoreboard every 10 seconds
+    const scoreboardInterval = setInterval(async () => {
+      if (sessionId) {
+        try {
+          const scoreboardData = await api.visualization.getScoreboard(sessionId);
+          setScoreboard(scoreboardData.rankings);
+        } catch (err) {
+          console.error('Failed to refresh scoreboard:', err);
+        }
+      }
+    }, 10000);
+
+    return () => clearInterval(scoreboardInterval);
   }, [userId, userName, sessionId, currentSessionId, navigate]);
 
   const fetchSessionData = async () => {
@@ -78,6 +98,19 @@ export const BrainstormSession = () => {
     }
   };
 
+  const fetchVisualizationData = async () => {
+    if (!sessionId) return;
+
+    try {
+      const vizData = await api.visualization.get(sessionId);
+      setIdeas(vizData.ideas);
+      setClusters(vizData.clusters);
+      console.log('Visualization data refreshed (ideas and clusters only)');
+    } catch (err) {
+      console.error('Failed to refresh visualization data:', err);
+    }
+  };
+
   function handleWebSocketMessage(event: WebSocketEvent) {
     switch (event.type) {
       case 'idea_created':
@@ -95,6 +128,12 @@ export const BrainstormSession = () => {
 
       case 'clusters_updated':
         setClusters(event.data.clusters);
+        break;
+
+      case 'clusters_recalculated':
+        // Refresh only visualization data (ideas and clusters) when clusters are recalculated
+        console.log('Clusters recalculated - refreshing visualization only');
+        fetchVisualizationData();
         break;
 
       case 'scoreboard_updated':
@@ -118,7 +157,7 @@ export const BrainstormSession = () => {
     }
   }
 
-  const handleIdeaSubmit = async (rawText: string) => {
+  const handleIdeaSubmit = async (rawText: string, skipFormatting?: boolean) => {
     if (!sessionId || !userId) return;
 
     try {
@@ -126,11 +165,54 @@ export const BrainstormSession = () => {
         session_id: sessionId,
         user_id: userId,
         raw_text: rawText,
+        skip_formatting: skipFormatting,
       });
       // Idea will be added via WebSocket
     } catch (err) {
       console.error('Failed to submit idea:', err);
       throw err;
+    }
+  };
+
+  const handleRecalculateClick = () => {
+    if (ideas.length < 10) {
+      alert('クラスタ再計算にはアイディアが10件以上必要です');
+      return;
+    }
+    setShowAdminDialog(true);
+  };
+
+  const handleAdminSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!sessionId) return;
+
+    try {
+      const result = await api.auth.verifyAdmin(adminPassword);
+      if (!result.success) {
+        setError('管理者認証に失敗しました');
+        return;
+      }
+
+      setClusteringInProgress(true);
+      setShowAdminDialog(false);
+      setAdminPassword('');
+
+      // Prepare fixed_cluster_count parameter
+      const fixedCount = clusterMode === 'fixed' && fixedClusterCount
+        ? parseInt(fixedClusterCount, 10)
+        : null;
+
+      await api.debug.forceCluster(sessionId, true, fixedCount);
+
+      setError(null);
+      alert('クラスタリングが完了しました');
+      await fetchSessionData();
+    } catch (err) {
+      console.error('Failed to recalculate clustering:', err);
+      setError('クラスタリングの再計算に失敗しました');
+    } finally {
+      setClusteringInProgress(false);
     }
   };
 
@@ -167,16 +249,17 @@ export const BrainstormSession = () => {
 
   return (
     <div style={{
-      minHeight: '100vh',
+      height: '100vh',
       background: '#f5f5f5',
       display: 'flex',
       flexDirection: 'column',
+      overflow: 'hidden',
     }}>
       {/* Header */}
       <div style={{
         background: 'white',
         boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-        padding: '1rem 2rem',
+        padding: '0.75rem 1rem',
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
@@ -198,28 +281,48 @@ export const BrainstormSession = () => {
             </span>
           </div>
         </div>
-        <button
-          onClick={() => navigate('/sessions')}
-          style={{
-            padding: '0.5rem 1rem',
-            background: '#f0f0f0',
-            border: 'none',
-            borderRadius: '0.5rem',
-            cursor: 'pointer',
-          }}
-        >
-          セッション一覧
-        </button>
+        <div style={{ display: 'flex', gap: '0.5rem' }}>
+          {ideas.length >= 10 && (
+            <button
+              onClick={handleRecalculateClick}
+              disabled={clusteringInProgress}
+              style={{
+                padding: '0.5rem 1rem',
+                background: clusteringInProgress ? '#ccc' : '#667eea',
+                color: 'white',
+                border: 'none',
+                borderRadius: '0.5rem',
+                cursor: clusteringInProgress ? 'not-allowed' : 'pointer',
+                fontWeight: '600',
+              }}
+            >
+              {clusteringInProgress ? '再計算中...' : '🔄 クラスタ再計算（管理者）'}
+            </button>
+          )}
+          <button
+            onClick={() => navigate('/sessions')}
+            style={{
+              padding: '0.5rem 1rem',
+              background: '#f0f0f0',
+              border: 'none',
+              borderRadius: '0.5rem',
+              cursor: 'pointer',
+            }}
+          >
+            セッション一覧
+          </button>
+        </div>
       </div>
 
       {/* Main content */}
       <div style={{
         flex: 1,
         display: 'grid',
-        gridTemplateColumns: '1fr 350px',
-        gap: '1rem',
-        padding: '1rem',
+        gridTemplateColumns: '1fr 320px',
+        gap: '0.5rem',
+        padding: '0.5rem',
         overflow: 'hidden',
+        maxWidth: '100vw',
       }}>
         {/* Visualization + Input */}
         <div style={{
@@ -241,6 +344,7 @@ export const BrainstormSession = () => {
               clusters={clusters}
               selectedIdea={selectedIdea}
               onSelectIdea={setSelectedIdea}
+              hoveredIdeaId={hoveredIdeaId}
             />
           </div>
 
@@ -252,7 +356,7 @@ export const BrainstormSession = () => {
               boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
               padding: '1rem',
             }}>
-              <IdeaInput onSubmit={handleIdeaSubmit} />
+              <IdeaInput onSubmit={handleIdeaSubmit} sessionId={sessionId} />
             </div>
           )}
 
@@ -275,8 +379,17 @@ export const BrainstormSession = () => {
           borderRadius: '0.5rem',
           boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
           overflow: 'hidden',
+          minHeight: 0,
+          display: 'flex',
+          flexDirection: 'column',
         }}>
-          <Scoreboard rankings={scoreboard} currentUserId={userId || ''} />
+          <Scoreboard
+            rankings={scoreboard}
+            currentUserId={userId || ''}
+            myIdeas={ideas.filter(idea => idea.user_id === userId)}
+            allIdeas={ideas}
+            onHoverIdea={setHoveredIdeaId}
+          />
         </div>
       </div>
 
@@ -361,6 +474,147 @@ export const BrainstormSession = () => {
                 {selectedIdea.raw_text}
               </p>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Admin authentication dialog */}
+      {showAdminDialog && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0,0,0,0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+          }}
+          onClick={() => setShowAdminDialog(false)}
+        >
+          <div
+            style={{
+              background: 'white',
+              padding: '2rem',
+              borderRadius: '1rem',
+              maxWidth: '400px',
+              width: '90%',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 style={{ marginBottom: '1rem', fontSize: '1.5rem', fontWeight: 'bold' }}>
+              クラスタ再計算設定
+            </h2>
+            <p style={{ marginBottom: '1.5rem', color: '#666' }}>
+              クラスタ再計算には管理者パスワードが必要です
+            </p>
+
+            <form onSubmit={handleAdminSubmit}>
+              <input
+                type="password"
+                value={adminPassword}
+                onChange={(e) => setAdminPassword(e.target.value)}
+                placeholder="管理者パスワード"
+                autoFocus
+                style={{
+                  width: '100%',
+                  padding: '0.75rem',
+                  border: '2px solid #e0e0e0',
+                  borderRadius: '0.5rem',
+                  fontSize: '1rem',
+                  marginBottom: '1rem',
+                  boxSizing: 'border-box',
+                }}
+              />
+
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '600', fontSize: '0.875rem' }}>
+                  クラスタ数の設定
+                </label>
+                <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', flex: 1 }}>
+                    <input
+                      type="radio"
+                      name="clusterMode"
+                      value="auto"
+                      checked={clusterMode === 'auto'}
+                      onChange={(e) => setClusterMode(e.target.value as 'auto' | 'fixed')}
+                      style={{ marginRight: '0.5rem' }}
+                    />
+                    <span>自動 (計算式で決定)</span>
+                  </label>
+                  <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', flex: 1 }}>
+                    <input
+                      type="radio"
+                      name="clusterMode"
+                      value="fixed"
+                      checked={clusterMode === 'fixed'}
+                      onChange={(e) => setClusterMode(e.target.value as 'auto' | 'fixed')}
+                      style={{ marginRight: '0.5rem' }}
+                    />
+                    <span>固定値</span>
+                  </label>
+                </div>
+                {clusterMode === 'fixed' && (
+                  <input
+                    type="number"
+                    min="2"
+                    max="50"
+                    value={fixedClusterCount}
+                    onChange={(e) => setFixedClusterCount(e.target.value)}
+                    placeholder="クラスタ数 (例: 5)"
+                    style={{
+                      width: '100%',
+                      padding: '0.75rem',
+                      border: '2px solid #e0e0e0',
+                      borderRadius: '0.5rem',
+                      fontSize: '1rem',
+                      boxSizing: 'border-box',
+                    }}
+                  />
+                )}
+              </div>
+
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowAdminDialog(false);
+                    setAdminPassword('');
+                  }}
+                  style={{
+                    flex: 1,
+                    padding: '0.75rem',
+                    background: '#f0f0f0',
+                    border: 'none',
+                    borderRadius: '0.5rem',
+                    cursor: 'pointer',
+                    fontWeight: '600',
+                  }}
+                >
+                  キャンセル
+                </button>
+                <button
+                  type="submit"
+                  disabled={!adminPassword.trim()}
+                  style={{
+                    flex: 1,
+                    padding: '0.75rem',
+                    background: adminPassword.trim() ? '#667eea' : '#ccc',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '0.5rem',
+                    cursor: adminPassword.trim() ? 'pointer' : 'not-allowed',
+                    fontWeight: '600',
+                  }}
+                >
+                  実行
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

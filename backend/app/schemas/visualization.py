@@ -24,6 +24,8 @@ class IdeaVisualization(BaseModel):
     user_name: str = Field(..., description="User name")
     formatted_text: str = Field(..., description="Formatted idea text")
     raw_text: str = Field(..., description="Original text")
+    closest_idea_id: UUID | None = Field(None, description="ID of the closest idea at submission time")
+    timestamp: str = Field(..., description="Creation timestamp (ISO format)")
 
 
 class ClusterResponse(BaseModel):

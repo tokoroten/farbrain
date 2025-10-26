@@ -16,6 +16,10 @@ class IdeaCreate(BaseModel):
         max_length=2000,
         description="User's raw input"
     )
+    skip_formatting: bool = Field(
+        False,
+        description="Skip LLM formatting and use raw text directly"
+    )
 
 
 class IdeaResponse(BaseModel):
@@ -31,6 +35,7 @@ class IdeaResponse(BaseModel):
     y: float = Field(..., description="UMAP y-coordinate")
     cluster_id: int | None = Field(None, description="Assigned cluster ID")
     novelty_score: float = Field(..., description="Novelty score (0-100)")
+    closest_idea_id: UUID | None = Field(None, description="ID of the closest idea at submission time")
     timestamp: datetime = Field(..., description="Creation timestamp")
 
     model_config = {"from_attributes": True}

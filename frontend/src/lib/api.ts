@@ -28,6 +28,12 @@ const apiClient = axios.create({
 });
 
 export const api = {
+  // Health check
+  health: async (): Promise<{ status: string }> => {
+    const response = await apiClient.get('/health');
+    return response.data;
+  },
+
   // User endpoints
   users: {
     register: async (data: UserRegisterRequest): Promise<UserRegisterResponse> => {
@@ -76,6 +82,11 @@ export const api = {
       });
       return response.data;
     },
+
+    delete: async (sessionId: string): Promise<{ message: string; session_id: string }> => {
+      const response = await apiClient.delete(`/api/sessions/${sessionId}`);
+      return response.data;
+    },
   },
 
   // Idea endpoints
@@ -105,6 +116,38 @@ export const api = {
 
     getScoreboard: async (sessionId: string): Promise<ScoreboardResponse> => {
       const response = await apiClient.get(`/api/visualization/${sessionId}/scoreboard`);
+      return response.data;
+    },
+  },
+
+  // Auth endpoints
+  auth: {
+    verifyAdmin: async (password: string): Promise<{ success: boolean; message: string }> => {
+      const response = await apiClient.post('/api/admin/verify', { password });
+      return response.data;
+    },
+  },
+
+  // Debug endpoints
+  debug: {
+    forceCluster: async (sessionId: string, useLlmLabels = false, fixedClusterCount: number | null = null): Promise<any> => {
+      const response = await apiClient.post('/api/debug/force-cluster', {
+        session_id: sessionId,
+        use_llm_labels: useLlmLabels,
+        fixed_cluster_count: fixedClusterCount,
+      });
+      return response.data;
+    },
+
+    createTestSession: async (): Promise<{
+      message: string;
+      session_id: string;
+      session_title: string;
+      user_count: number;
+      idea_count: number;
+      cluster_count: number;
+    }> => {
+      const response = await apiClient.post('/api/debug/create-test-session');
       return response.data;
     },
   },

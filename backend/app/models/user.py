@@ -2,10 +2,15 @@
 
 import uuid
 from datetime import datetime
-from sqlalchemy import String, Float, DateTime, ForeignKey
+from typing import TYPE_CHECKING
+from sqlalchemy import String, Float, Integer, DateTime, ForeignKey, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.app.db.base import Base
+
+if TYPE_CHECKING:
+    from backend.app.models.session import Session
+    from backend.app.models.idea import Idea
 
 
 class User(Base):
@@ -18,24 +23,28 @@ class User(Base):
         user_id: Global user ID (from localStorage)
         name: User's display name
         total_score: Cumulative novelty score
+        idea_count: Number of ideas submitted by the user
         joined_at: Timestamp when user joined the session
     """
 
     __tablename__ = "users"
+    __table_args__ = (
+        UniqueConstraint('user_id', 'session_id', name='uix_user_session'),
+    )
 
-    id: Mapped[uuid.UUID] = mapped_column(
+    id: Mapped[str] = mapped_column(
         String(36),
         primary_key=True,
-        default=uuid.uuid4,
+        default=lambda: str(uuid.uuid4()),
         index=True,
     )
-    session_id: Mapped[uuid.UUID] = mapped_column(
+    session_id: Mapped[str] = mapped_column(
         String(36),
         ForeignKey("sessions.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
-    user_id: Mapped[uuid.UUID] = mapped_column(
+    user_id: Mapped[str] = mapped_column(
         String(36),
         nullable=False,
         index=True,
@@ -43,6 +52,7 @@ class User(Base):
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     total_score: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    idea_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     joined_at: Mapped[datetime] = mapped_column(
         DateTime,
         nullable=False,

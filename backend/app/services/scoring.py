@@ -54,8 +54,9 @@ def min_distance_transform(similarities: np.ndarray) -> float:
     """
     Minimum distance transformation: closest idea distance as score.
 
-    Score = min(1 - similarity) * 100
+    Score = min(100, (min(1 - similarity))^1.5 * 300)
     Higher score means more different from all existing ideas.
+    Uses power of 1.5 to emphasize novel ideas and penalize similar ones.
 
     Args:
         similarities: Cosine similarities (0-1)
@@ -69,7 +70,8 @@ def min_distance_transform(similarities: np.ndarray) -> float:
     distances = 1 - similarities
     min_distance = np.min(distances)
 
-    score = min(100.0, min_distance * 50.0)
+    # Power of 1.5 to emphasize novelty, multiply by 300, clip to [0, 100]
+    score = min(100.0, (min_distance ** 1.5) * 300.0)
     return float(score)
 
 

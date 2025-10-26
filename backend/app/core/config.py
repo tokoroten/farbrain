@@ -36,7 +36,7 @@ class Settings(BaseSettings):
 
     # CORS
     cors_origins: str = Field(
-        default="http://localhost:5173,http://localhost:3000",
+        default="http://localhost:5173,http://localhost:5174,http://localhost:3000",
         description="Comma-separated list of allowed CORS origins"
     )
 
@@ -64,7 +64,11 @@ class Settings(BaseSettings):
     )
     clustering_interval: int = Field(
         default=10,
-        description="Recalculate clustering every N ideas"
+        description="Update cluster labels every N ideas (label-only update)"
+    )
+    reclustering_interval: int = Field(
+        default=50,
+        description="Full re-clustering (UMAP re-fit) every N ideas"
     )
     max_clusters: int = Field(
         default=20,
@@ -76,8 +80,8 @@ class Settings(BaseSettings):
     )
 
     # UMAP Parameters
-    umap_n_neighbors: int = Field(default=15, description="UMAP n_neighbors parameter")
-    umap_min_dist: float = Field(default=0.1, description="UMAP min_dist parameter")
+    umap_n_neighbors: int = Field(default=50, description="UMAP n_neighbors parameter (larger = global structure)")
+    umap_min_dist: float = Field(default=0.3, description="UMAP min_dist parameter (larger = more spread out)")
 
     # Scoring Parameters
     anomaly_contamination: float = Field(

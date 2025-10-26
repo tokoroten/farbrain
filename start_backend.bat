@@ -27,5 +27,5 @@ if not exist .venv (
 )
 
 REM Start the server
-echo Starting FastAPI server on http://localhost:8001
-uv run uvicorn backend.app.main:app --reload --host 127.0.0.1 --port 8001
+echo Starting FastAPI server on http://localhost:8000
+uv run uvicorn backend.app.main:app --reload --host 127.0.0.1 --port 8000

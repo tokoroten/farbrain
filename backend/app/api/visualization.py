@@ -31,7 +31,7 @@ async def get_visualization(
     """Get complete visualization data for a session."""
     # Verify session exists
     session_result = await db.execute(
-        select(Session).where(Session.id == session_id)
+        select(Session).where(Session.id == str(session_id))
     )
     session = session_result.scalar_one_or_none()
 
@@ -43,13 +43,13 @@ async def get_visualization(
 
     # Get all ideas
     ideas_result = await db.execute(
-        select(Idea).where(Idea.session_id == session_id).order_by(Idea.created_at)
+        select(Idea).where(Idea.session_id == str(session_id)).order_by(Idea.timestamp)
     )
     ideas = ideas_result.scalars().all()
 
     # Get all users for name lookup
     users_result = await db.execute(
-        select(User).where(User.session_id == session_id)
+        select(User).where(User.session_id == str(session_id))
     )
     users = {user.user_id: user.name for user in users_result.scalars().all()}
 
@@ -65,13 +65,15 @@ async def get_visualization(
             user_name=users.get(idea.user_id, "Unknown"),
             formatted_text=idea.formatted_text,
             raw_text=idea.raw_text,
+            closest_idea_id=idea.closest_idea_id,
+            timestamp=idea.timestamp.isoformat(),
         )
         for idea in ideas
     ]
 
     # Get all clusters
     clusters_result = await db.execute(
-        select(Cluster).where(Cluster.session_id == session_id)
+        select(Cluster).where(Cluster.session_id == str(session_id))
     )
     clusters = clusters_result.scalars().all()
 
@@ -101,7 +103,7 @@ async def get_scoreboard(
     """Get scoreboard/rankings for a session."""
     # Verify session exists
     session_result = await db.execute(
-        select(Session).where(Session.id == session_id)
+        select(Session).where(Session.id == str(session_id))
     )
     session = session_result.scalar_one_or_none()
 
@@ -114,7 +116,7 @@ async def get_scoreboard(
     # Get all users sorted by total score
     users_result = await db.execute(
         select(User)
-        .where(User.session_id == session_id)
+        .where(User.session_id == str(session_id))
         .order_by(User.total_score.desc())
     )
     users = users_result.scalars().all()
@@ -126,7 +128,7 @@ async def get_scoreboard(
         top_idea_result = await db.execute(
             select(Idea)
             .where(
-                Idea.session_id == session_id,
+                Idea.session_id == str(session_id),
                 Idea.user_id == user.user_id
             )
             .order_by(Idea.novelty_score.desc())

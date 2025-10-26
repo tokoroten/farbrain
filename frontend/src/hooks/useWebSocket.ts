@@ -27,6 +27,20 @@ export const useWebSocket = ({
   const reconnectTimeoutRef = useRef<number | null>(null);
   const heartbeatIntervalRef = useRef<number | null>(null);
 
+  // Store callback refs to avoid re-creating connect function
+  const onMessageRef = useRef(onMessage);
+  const onOpenRef = useRef(onOpen);
+  const onCloseRef = useRef(onClose);
+  const onErrorRef = useRef(onError);
+
+  // Update refs when callbacks change
+  useEffect(() => {
+    onMessageRef.current = onMessage;
+    onOpenRef.current = onOpen;
+    onCloseRef.current = onClose;
+    onErrorRef.current = onError;
+  }, [onMessage, onOpen, onClose, onError]);
+
   const connect = useCallback(() => {
     if (ws.current?.readyState === WebSocket.OPEN) {
       return;
@@ -37,7 +51,7 @@ export const useWebSocket = ({
     websocket.onopen = () => {
       console.log('WebSocket connected');
       setIsConnected(true);
-      onOpen?.();
+      onOpenRef.current?.();
 
       // Start heartbeat
       heartbeatIntervalRef.current = window.setInterval(() => {
@@ -50,7 +64,7 @@ export const useWebSocket = ({
     websocket.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data) as WebSocketEvent;
-        onMessage?.(data);
+        onMessageRef.current?.(data);
       } catch (error) {
         console.error('Failed to parse WebSocket message:', error);
       }
@@ -59,7 +73,7 @@ export const useWebSocket = ({
     websocket.onclose = () => {
       console.log('WebSocket disconnected');
       setIsConnected(false);
-      onClose?.();
+      onCloseRef.current?.();
 
       // Clear heartbeat
       if (heartbeatIntervalRef.current) {
@@ -76,11 +90,11 @@ export const useWebSocket = ({
 
     websocket.onerror = (error) => {
       console.error('WebSocket error:', error);
-      onError?.(error);
+      onErrorRef.current?.(error);
     };
 
     ws.current = websocket;
-  }, [sessionId, onMessage, onOpen, onClose, onError]);
+  }, [sessionId]);
 
   const disconnect = useCallback(() => {
     if (reconnectTimeoutRef.current) {

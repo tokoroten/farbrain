@@ -69,6 +69,28 @@ class EmbeddingService:
                     pass
         return self._model
 
+    def _preprocess_text(self, text: str) -> str:
+        """
+        Preprocess text before embedding.
+
+        - Strips leading/trailing whitespace
+        - Removes newlines and replaces with spaces
+        - Normalizes multiple spaces to single space
+
+        Args:
+            text: Raw text input
+
+        Returns:
+            Preprocessed text
+        """
+        # Remove newlines and replace with space
+        text = text.replace('\n', ' ').replace('\r', ' ')
+        # Normalize multiple spaces to single space
+        text = ' '.join(text.split())
+        # Strip leading/trailing whitespace
+        text = text.strip()
+        return text
+
     def embed_sync(
         self,
         text: str | list[str],
@@ -89,11 +111,14 @@ class EmbeddingService:
         Raises:
             ValueError: If text is empty
         """
+        # Preprocess text(s)
         if isinstance(text, str):
-            if not text.strip():
+            text = self._preprocess_text(text)
+            if not text:
                 raise ValueError("Text cannot be empty")
         elif isinstance(text, list):
-            if not text or all(not t.strip() for t in text):
+            text = [self._preprocess_text(t) for t in text]
+            if not text or all(not t for t in text):
                 raise ValueError("Text list cannot be empty")
 
         embeddings = self.model.encode(

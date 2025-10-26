@@ -64,6 +64,8 @@ class SessionResponse(BaseModel):
     accepting_ideas: bool = Field(..., description="Whether accepting new ideas")
     participant_count: int = Field(default=0, description="Number of participants")
     idea_count: int = Field(default=0, description="Number of ideas")
+    formatting_prompt: str | None = Field(None, description="Custom formatting prompt")
+    summarization_prompt: str | None = Field(None, description="Custom summarization prompt")
     created_at: datetime = Field(..., description="Creation timestamp")
     ended_at: datetime | None = Field(None, description="End timestamp")
 

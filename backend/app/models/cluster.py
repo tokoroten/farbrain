@@ -2,10 +2,14 @@
 
 import uuid
 from datetime import datetime
+from typing import TYPE_CHECKING
 from sqlalchemy import String, Integer, Float, Text, DateTime, ForeignKey, JSON
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.app.db.base import Base
+
+if TYPE_CHECKING:
+    from backend.app.models.session import Session
 
 
 class Cluster(Base):
@@ -27,7 +31,7 @@ class Cluster(Base):
 
     # Composite primary key: (session_id, cluster_id)
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=False)
-    session_id: Mapped[uuid.UUID] = mapped_column(
+    session_id: Mapped[str] = mapped_column(
         String(36),
         ForeignKey("sessions.id", ondelete="CASCADE"),
         primary_key=True,

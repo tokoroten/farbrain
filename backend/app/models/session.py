@@ -3,10 +3,16 @@
 import uuid
 from datetime import datetime
 from enum import Enum
+from typing import TYPE_CHECKING
 from sqlalchemy import String, Integer, DateTime, Boolean, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.app.db.base import Base
+
+if TYPE_CHECKING:
+    from backend.app.models.user import User
+    from backend.app.models.idea import Idea
+    from backend.app.models.cluster import Cluster
 
 
 class SessionStatus(str, Enum):
@@ -36,10 +42,10 @@ class Session(Base):
 
     __tablename__ = "sessions"
 
-    id: Mapped[uuid.UUID] = mapped_column(
+    id: Mapped[str] = mapped_column(
         String(36),
         primary_key=True,
-        default=uuid.uuid4,
+        default=lambda: str(uuid.uuid4()),
         index=True,
     )
     title: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -59,6 +65,7 @@ class Session(Base):
     accepting_ideas: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     formatting_prompt: Mapped[str | None] = mapped_column(Text, nullable=True)
     summarization_prompt: Mapped[str | None] = mapped_column(Text, nullable=True)
+    fixed_cluster_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime,
         nullable=False,

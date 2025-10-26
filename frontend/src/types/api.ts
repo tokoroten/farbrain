@@ -68,6 +68,7 @@ export interface Idea {
   y: number;
   cluster_id: number | null;
   novelty_score: number;
+  closest_idea_id: string | null;
   timestamp: string;
 }
 
@@ -75,6 +76,7 @@ export interface IdeaCreateRequest {
   session_id: string;
   user_id: string;
   raw_text: string;
+  skip_formatting?: boolean;
 }
 
 export interface IdeaListResponse {
@@ -105,6 +107,8 @@ export interface IdeaVisualization {
   user_name: string;
   formatted_text: string;
   raw_text: string;
+  closest_idea_id: string | null;
+  timestamp: string;
 }
 
 export interface VisualizationResponse {
@@ -135,6 +139,7 @@ export type WebSocketEvent =
   | { type: 'idea_created'; data: IdeaVisualization }
   | { type: 'coordinates_updated'; data: { updates: Array<{ idea_id: string; x: number; y: number; cluster_id: number | null }> } }
   | { type: 'clusters_updated'; data: { clusters: ClusterData[] } }
+  | { type: 'clusters_recalculated'; data: {} }
   | { type: 'user_joined'; data: { user_id: string; user_name: string } }
   | { type: 'scoreboard_updated'; data: { rankings: ScoreboardEntry[] } }
   | { type: 'session_status_changed'; data: { status: string; accepting_ideas: boolean } }
