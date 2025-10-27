@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from backend.app.api import sessions, users, ideas, visualization, websocket, auth, dialogue, debug
 from backend.app.core.config import settings
+from backend.app.core.exception_handlers import register_exception_handlers
 from backend.app.db.base import engine, Base
 # Import all models to register them with SQLAlchemy
 from backend.app.models.session import Session as SessionModel
@@ -49,6 +50,9 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan,
 )
+
+# Register custom exception handlers
+register_exception_handlers(app)
 
 # CORS middleware for frontend
 app.add_middleware(

@@ -11,6 +11,12 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.core.config import settings
+from backend.app.core.exceptions import (
+    SessionNotFoundError,
+    SessionNotAcceptingIdeasError,
+    SessionEndedError,
+    UserNotFoundError,
+)
 from backend.app.db.base import get_db
 from backend.app.models.cluster import Cluster
 from backend.app.models.idea import Idea
@@ -29,10 +35,133 @@ router = APIRouter(prefix="/ideas", tags=["ideas"])
 # Logger
 logger = logging.getLogger(__name__)
 
-# Service singletons
-embedding_service = EmbeddingService()
-llm_service = LLMService()
+# Service instances
 novelty_scorer = NoveltyScorer(min_distance_transform)
+
+
+# Helper functions for create_idea endpoint
+
+async def _verify_session_and_user(
+    session_id: str,
+    user_id: str,
+    db: AsyncSession
+) -> tuple[Session, User]:
+    """
+    Verify that session exists and user is part of it.
+
+    Args:
+        session_id: Session ID to verify
+        user_id: User ID to verify
+        db: Database session
+
+    Returns:
+        Tuple of (Session, User)
+
+    Raises:
+        SessionNotFoundError: If session does not exist
+        SessionNotAcceptingIdeasError: If session is not accepting new ideas
+        SessionEndedError: If session has ended
+        UserNotFoundError: If user not found in session
+    """
+    # Verify session
+    session_result = await db.execute(
+        select(Session).where(Session.id == session_id)
+    )
+    session = session_result.scalar_one_or_none()
+
+    if not session:
+        raise SessionNotFoundError(session_id)
+
+    if not session.accepting_ideas:
+        raise SessionNotAcceptingIdeasError(session_id)
+
+    if session.status == "ended":
+        raise SessionEndedError(session_id)
+
+    # Verify user
+    user_result = await db.execute(
+        select(User).where(
+            User.session_id == session_id,
+            User.user_id == user_id
+        )
+    )
+    user = user_result.scalar_one_or_none()
+
+    if not user:
+        raise UserNotFoundError(user_id, session_id)
+
+    return session, user
+
+
+async def _format_and_embed_text(
+    raw_text: str,
+    skip_formatting: bool,
+    session: Session
+) -> tuple[str, np.ndarray]:
+    """
+    Format text with LLM (if needed) and generate embedding.
+
+    Args:
+        raw_text: Raw user input
+        skip_formatting: Whether to skip LLM formatting
+        session: Session object for context
+
+    Returns:
+        Tuple of (formatted_text, embedding_array)
+    """
+    # Format with LLM if requested
+    if skip_formatting:
+        formatted_text = raw_text
+    else:
+        formatted_text = await get_llm_service().format_idea(
+            raw_text,
+            custom_prompt=session.formatting_prompt,
+            session_context=session.description
+        )
+
+    # Generate embedding
+    embedding = await get_embedding_service().embed(formatted_text)
+    return formatted_text, embedding
+
+
+def _calculate_novelty_and_closest(
+    embedding: np.ndarray,
+    existing_ideas: list[Idea]
+) -> tuple[float, str | None]:
+    """
+    Calculate novelty score and find closest existing idea.
+
+    Args:
+        embedding: Embedding vector of new idea
+        existing_ideas: List of existing ideas in session
+
+    Returns:
+        Tuple of (novelty_score, closest_idea_id)
+    """
+    n_existing = len(existing_ideas)
+
+    if n_existing == 0:
+        return 100.0, None
+
+    existing_embeddings = np.array([idea.embedding for idea in existing_ideas])
+
+    # Calculate cosine similarities to find closest idea
+    similarities = cosine_similarity(
+        embedding.reshape(1, -1),
+        existing_embeddings
+    )[0]
+
+    # Find closest idea (highest similarity = most similar)
+    closest_idx = np.argmax(similarities)
+    closest_idea_id = str(existing_ideas[closest_idx].id)
+
+    # Calculate novelty score
+    novelty_score = novelty_scorer.calculate_score(
+        embedding.reshape(1, -1),
+        existing_embeddings
+    )
+
+    return novelty_score, closest_idea_id
 
 
 @router.post("/", response_model=IdeaResponse, status_code=status.HTTP_201_CREATED)
@@ -50,63 +179,19 @@ async def create_idea(
     6. Trigger clustering if needed (every 10 ideas)
     7. Update user score
     """
-    # デバッグログ
-    print(f"[DEBUG-PRINT] create_idea called: session={idea_data.session_id}, user={idea_data.user_id}")
-    logger.error(f"[DEBUG-ERROR] create_idea called: session={idea_data.session_id}, user={idea_data.user_id}")
-
-    # Verify session
-    session_result = await db.execute(
-        select(Session).where(Session.id == str(idea_data.session_id))
+    # Step 1: Verify session and user
+    session, user = await _verify_session_and_user(
+        str(idea_data.session_id),
+        str(idea_data.user_id),
+        db
     )
-    session = session_result.scalar_one_or_none()
 
-    if not session:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Session not found"
-        )
-
-    if not session.accepting_ideas:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Session is not accepting new ideas"
-        )
-
-    if session.status == "ended":
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Session has ended"
-        )
-
-    # Verify user
-    user_result = await db.execute(
-        select(User).where(
-            User.session_id == str(idea_data.session_id),
-            User.user_id == str(idea_data.user_id)
-        )
-    )
-    user = user_result.scalar_one_or_none()
-
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found in this session"
-        )
-
-    # Get existing ideas for scoring and clustering
-    print(f"[DEBUG-PRINT] Fetching existing ideas for session_id: {idea_data.session_id} (type: {type(idea_data.session_id)})")
-    logger.error(f"[DEBUG-ERROR] About to execute SELECT query for session_id: {idea_data.session_id}")
-
+    # Step 2: Get existing ideas for scoring and clustering
     existing_ideas_result = await db.execute(
         select(Idea).where(Idea.session_id == str(idea_data.session_id))
     )
     existing_ideas = existing_ideas_result.scalars().all()
     n_existing = len(existing_ideas)
-
-    print(f"[DEBUG-PRINT] Found {n_existing} existing ideas")
-    logger.error(f"[DEBUG-ERROR] Query returned {n_existing} ideas")
-    if n_existing > 0:
-        logger.error(f"[DEBUG-ERROR] First idea session_id: {existing_ideas[0].session_id} (type: {type(existing_ideas[0].session_id)})")
 
     # Get session-specific clustering service
     clustering_service = get_clustering_service(
@@ -114,42 +199,19 @@ async def create_idea(
         fixed_cluster_count=session.fixed_cluster_count
     )
 
-    # Step 1: Format idea with LLM (with session context) - skip if requested
-    if idea_data.skip_formatting:
-        formatted_text = idea_data.raw_text
-    else:
-        formatted_text = await llm_service.format_idea(
-            idea_data.raw_text,
-            custom_prompt=session.formatting_prompt,
-            session_context=session.description
-        )
-
-    # Step 2: Generate embedding
-    embedding = await embedding_service.embed(formatted_text)
+    # Step 3: Format text and generate embedding
+    formatted_text, embedding = await _format_and_embed_text(
+        idea_data.raw_text,
+        idea_data.skip_formatting,
+        session
+    )
     embedding_list = embedding.tolist()
 
-    # Step 3: Calculate novelty score and find closest idea
-    closest_idea_id = None
-    if n_existing == 0:
-        novelty_score = 100.0  # First idea gets max score
-    else:
-        existing_embeddings = np.array([idea.embedding for idea in existing_ideas])
-
-        # Calculate cosine similarities to find closest idea
-        similarities = cosine_similarity(
-            embedding.reshape(1, -1),
-            existing_embeddings
-        )[0]
-
-        # Find closest idea (highest similarity = most similar)
-        closest_idx = np.argmax(similarities)
-        closest_idea_id = str(existing_ideas[closest_idx].id)
-
-        # Calculate novelty score
-        novelty_score = novelty_scorer.calculate_score(
-            embedding.reshape(1, -1),
-            existing_embeddings
-        )
+    # Step 4: Calculate novelty score and find closest idea
+    novelty_score, closest_idea_id = _calculate_novelty_and_closest(
+        embedding,
+        existing_ideas
+    )
 
     # Step 4: Assign coordinates
     need_cluster_update = False  # Flag to track if we need to update clusters
@@ -458,7 +520,7 @@ async def update_cluster_labels(session_id: str, db: AsyncSession) -> None:
             sample_texts = [idea.formatted_text for idea in sampled_ideas]
 
             # Generate label (with session context)
-            label = await llm_service.summarize_cluster(
+            label = await get_llm_service().summarize_cluster(
                 sample_texts,
                 custom_prompt=session.summarization_prompt,
                 session_context=session.description

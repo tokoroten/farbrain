@@ -367,12 +367,6 @@ def get_clustering_service(session_id: str, fixed_cluster_count: int | None = No
     import logging
     logger = logging.getLogger(__name__)
 
-    # 必ず表示されるログ
-    print(f"[DEBUG-PRINT] get_clustering_service called for session {session_id}")
-    logger.error(f"[DEBUG-ERROR] get_clustering_service called for session {session_id}")
-    print(f"[DEBUG-PRINT] clear_clustering_service keys : {_clustering_services.keys()}")
-    logger.error(f"[DEBUG-ERROR] clear_clustering_service keys : {_clustering_services.keys()}")
-
     if session_id not in _clustering_services:
         logger.info(f"[CLUSTERING-CACHE] Creating new ClusteringService for session {session_id}")
         _clustering_services[session_id] = ClusteringService(fixed_cluster_count=fixed_cluster_count)
