@@ -29,9 +29,7 @@ router = APIRouter(prefix="/ideas", tags=["ideas"])
 # Logger
 logger = logging.getLogger(__name__)
 
-# Service singletons
-embedding_service = EmbeddingService()
-llm_service = LLMService()
+# Service instances
 novelty_scorer = NoveltyScorer(min_distance_transform)
 
 
@@ -50,10 +48,6 @@ async def create_idea(
     6. Trigger clustering if needed (every 10 ideas)
     7. Update user score
     """
-    # デバッグログ
-    print(f"[DEBUG-PRINT] create_idea called: session={idea_data.session_id}, user={idea_data.user_id}")
-    logger.error(f"[DEBUG-ERROR] create_idea called: session={idea_data.session_id}, user={idea_data.user_id}")
-
     # Verify session
     session_result = await db.execute(
         select(Session).where(Session.id == str(idea_data.session_id))
@@ -94,19 +88,11 @@ async def create_idea(
         )
 
     # Get existing ideas for scoring and clustering
-    print(f"[DEBUG-PRINT] Fetching existing ideas for session_id: {idea_data.session_id} (type: {type(idea_data.session_id)})")
-    logger.error(f"[DEBUG-ERROR] About to execute SELECT query for session_id: {idea_data.session_id}")
-
     existing_ideas_result = await db.execute(
         select(Idea).where(Idea.session_id == str(idea_data.session_id))
     )
     existing_ideas = existing_ideas_result.scalars().all()
     n_existing = len(existing_ideas)
-
-    print(f"[DEBUG-PRINT] Found {n_existing} existing ideas")
-    logger.error(f"[DEBUG-ERROR] Query returned {n_existing} ideas")
-    if n_existing > 0:
-        logger.error(f"[DEBUG-ERROR] First idea session_id: {existing_ideas[0].session_id} (type: {type(existing_ideas[0].session_id)})")
 
     # Get session-specific clustering service
     clustering_service = get_clustering_service(
@@ -118,14 +104,14 @@ async def create_idea(
     if idea_data.skip_formatting:
         formatted_text = idea_data.raw_text
     else:
-        formatted_text = await llm_service.format_idea(
+        formatted_text = await get_llm_service().format_idea(
             idea_data.raw_text,
             custom_prompt=session.formatting_prompt,
             session_context=session.description
         )
 
     # Step 2: Generate embedding
-    embedding = await embedding_service.embed(formatted_text)
+    embedding = await get_embedding_service().embed(formatted_text)
     embedding_list = embedding.tolist()
 
     # Step 3: Calculate novelty score and find closest idea
@@ -458,7 +444,7 @@ async def update_cluster_labels(session_id: str, db: AsyncSession) -> None:
             sample_texts = [idea.formatted_text for idea in sampled_ideas]
 
             # Generate label (with session context)
-            label = await llm_service.summarize_cluster(
+            label = await get_llm_service().summarize_cluster(
                 sample_texts,
                 custom_prompt=session.summarization_prompt,
                 session_context=session.description

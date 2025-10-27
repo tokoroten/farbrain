@@ -11,6 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.core.config import settings
+from backend.app.core.security import hash_password
 from backend.app.db.base import get_db
 from backend.app.models.session import Session
 from backend.app.models.user import User
@@ -28,6 +29,64 @@ from backend.app.services.llm import get_llm_service
 from backend.app.services.embedding import EmbeddingService
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
+
+
+async def _get_session_statistics(session_id: str, db: AsyncSession) -> tuple[int, int]:
+    """
+    Get participant and idea counts for a session.
+
+    Args:
+        session_id: Session ID
+        db: Database session
+
+    Returns:
+        Tuple of (participant_count, idea_count)
+    """
+    # Count participants
+    participant_query = select(User).where(User.session_id == session_id)
+    participant_result = await db.execute(participant_query)
+    participant_count = len(participant_result.scalars().all())
+
+    # Count ideas
+    idea_query = select(Idea).where(Idea.session_id == session_id)
+    idea_result = await db.execute(idea_query)
+    idea_count = len(idea_result.scalars().all())
+
+    return participant_count, idea_count
+
+
+def _to_session_response(
+    session: Session,
+    participant_count: int,
+    idea_count: int
+) -> SessionResponse:
+    """
+    Convert Session model to SessionResponse.
+
+    Args:
+        session: Session model
+        participant_count: Number of participants
+        idea_count: Number of ideas
+
+    Returns:
+        SessionResponse object
+    """
+    return SessionResponse(
+        id=session.id,
+        title=session.title,
+        description=session.description,
+        start_time=session.start_time,
+        duration=session.duration,
+        status=session.status,
+        has_password=session.password_hash is not None,
+        accepting_ideas=session.accepting_ideas,
+        participant_count=participant_count,
+        idea_count=idea_count,
+        formatting_prompt=session.formatting_prompt,
+        summarization_prompt=session.summarization_prompt,
+        created_at=session.created_at,
+        ended_at=session.ended_at,
+    )
 
 
 async def _create_starter_ideas_bg(
@@ -160,7 +219,7 @@ async def create_session(
         duration=session_data.duration,
         status="active",
         accepting_ideas=True,
-        password_hash=session_data.password,  # TODO: Hash password
+        password_hash=hash_password(session_data.password) if session_data.password else None,
         formatting_prompt=session_data.formatting_prompt,
         summarization_prompt=session_data.summarization_prompt,
     )
@@ -187,22 +246,8 @@ async def create_session(
         _create_starter_ideas_bg(session.id, system_user.user_id, session_data)
     )
 
-    return SessionResponse(
-        id=session.id,
-        title=session.title,
-        description=session.description,
-        start_time=session.start_time,
-        duration=session.duration,
-        status=session.status,
-        has_password=session.password_hash is not None,
-        accepting_ideas=session.accepting_ideas,
-        participant_count=1,  # System user
-        idea_count=0,  # Ideas being created in background
-        formatting_prompt=session.formatting_prompt,
-        summarization_prompt=session.summarization_prompt,
-        created_at=session.created_at,
-        ended_at=session.ended_at,
-    )
+    # Return response with initial counts (system user, no ideas yet)
+    return _to_session_response(session, participant_count=1, idea_count=0)
 
 
 @router.get("/", response_model=SessionListResponse)
@@ -222,36 +267,8 @@ async def list_sessions(
 
     session_responses = []
     for session in sessions:
-        # Count participants and ideas
-        from backend.app.models.user import User
-        from backend.app.models.idea import Idea
-
-        participant_query = select(User).where(User.session_id == session.id)
-        participant_result = await db.execute(participant_query)
-        participant_count = len(participant_result.scalars().all())
-
-        idea_query = select(Idea).where(Idea.session_id == session.id)
-        idea_result = await db.execute(idea_query)
-        idea_count = len(idea_result.scalars().all())
-
-        session_responses.append(
-            SessionResponse(
-                id=session.id,
-                title=session.title,
-                description=session.description,
-                start_time=session.start_time,
-                duration=session.duration,
-                status=session.status,
-                has_password=session.password_hash is not None,
-                accepting_ideas=session.accepting_ideas,
-                participant_count=participant_count,
-                idea_count=idea_count,
-                formatting_prompt=session.formatting_prompt,
-                summarization_prompt=session.summarization_prompt,
-                created_at=session.created_at,
-                ended_at=session.ended_at,
-            )
-        )
+        participant_count, idea_count = await _get_session_statistics(session.id, db)
+        session_responses.append(_to_session_response(session, participant_count, idea_count))
 
     return SessionListResponse(sessions=session_responses)
 
@@ -271,34 +288,8 @@ async def get_session(
             detail="Session not found"
         )
 
-    # Count participants and ideas
-    from backend.app.models.user import User
-    from backend.app.models.idea import Idea
-
-    participant_query = select(User).where(User.session_id == session_id)
-    participant_result = await db.execute(participant_query)
-    participant_count = len(participant_result.scalars().all())
-
-    idea_query = select(Idea).where(Idea.session_id == session_id)
-    idea_result = await db.execute(idea_query)
-    idea_count = len(idea_result.scalars().all())
-
-    return SessionResponse(
-        id=session.id,
-        title=session.title,
-        description=session.description,
-        start_time=session.start_time,
-        duration=session.duration,
-        status=session.status,
-        has_password=session.password_hash is not None,
-        accepting_ideas=session.accepting_ideas,
-        participant_count=participant_count,
-        idea_count=idea_count,
-        formatting_prompt=session.formatting_prompt,
-        summarization_prompt=session.summarization_prompt,
-        created_at=session.created_at,
-        ended_at=session.ended_at,
-    )
+    participant_count, idea_count = await _get_session_statistics(session_id, db)
+    return _to_session_response(session, participant_count, idea_count)
 
 
 @router.patch("/{session_id}", response_model=SessionResponse)
@@ -325,7 +316,7 @@ async def update_session(
     if session_update.duration is not None:
         session.duration = session_update.duration
     if session_update.password is not None:
-        session.password_hash = session_update.password  # TODO: Hash password
+        session.password_hash = hash_password(session_update.password)
     if session_update.formatting_prompt is not None:
         session.formatting_prompt = session_update.formatting_prompt
     if session_update.summarization_prompt is not None:
@@ -334,34 +325,8 @@ async def update_session(
     await db.commit()
     await db.refresh(session)
 
-    # Count participants and ideas
-    from backend.app.models.user import User
-    from backend.app.models.idea import Idea
-
-    participant_query = select(User).where(User.session_id == session_id)
-    participant_result = await db.execute(participant_query)
-    participant_count = len(participant_result.scalars().all())
-
-    idea_query = select(Idea).where(Idea.session_id == session_id)
-    idea_result = await db.execute(idea_query)
-    idea_count = len(idea_result.scalars().all())
-
-    return SessionResponse(
-        id=session.id,
-        title=session.title,
-        description=session.description,
-        start_time=session.start_time,
-        duration=session.duration,
-        status=session.status,
-        has_password=session.password_hash is not None,
-        accepting_ideas=session.accepting_ideas,
-        participant_count=participant_count,
-        idea_count=idea_count,
-        formatting_prompt=session.formatting_prompt,
-        summarization_prompt=session.summarization_prompt,
-        created_at=session.created_at,
-        ended_at=session.ended_at,
-    )
+    participant_count, idea_count = await _get_session_statistics(session_id, db)
+    return _to_session_response(session, participant_count, idea_count)
 
 
 @router.post("/{session_id}/end", response_model=SessionResponse)
@@ -399,34 +364,8 @@ async def end_session(
         accepting_ideas=False,
     )
 
-    # Count participants and ideas
-    from backend.app.models.user import User
-    from backend.app.models.idea import Idea
-
-    participant_query = select(User).where(User.session_id == session_id)
-    participant_result = await db.execute(participant_query)
-    participant_count = len(participant_result.scalars().all())
-
-    idea_query = select(Idea).where(Idea.session_id == session_id)
-    idea_result = await db.execute(idea_query)
-    idea_count = len(idea_result.scalars().all())
-
-    return SessionResponse(
-        id=session.id,
-        title=session.title,
-        description=session.description,
-        start_time=session.start_time,
-        duration=session.duration,
-        status=session.status,
-        has_password=session.password_hash is not None,
-        accepting_ideas=session.accepting_ideas,
-        participant_count=participant_count,
-        idea_count=idea_count,
-        formatting_prompt=session.formatting_prompt,
-        summarization_prompt=session.summarization_prompt,
-        created_at=session.created_at,
-        ended_at=session.ended_at,
-    )
+    participant_count, idea_count = await _get_session_statistics(session_id, db)
+    return _to_session_response(session, participant_count, idea_count)
 
 
 @router.post("/{session_id}/toggle-accepting", response_model=SessionResponse)
@@ -463,34 +402,8 @@ async def toggle_accepting_ideas(
         accepting_ideas=session.accepting_ideas,
     )
 
-    # Count participants and ideas
-    from backend.app.models.user import User
-    from backend.app.models.idea import Idea
-
-    participant_query = select(User).where(User.session_id == session_id)
-    participant_result = await db.execute(participant_query)
-    participant_count = len(participant_result.scalars().all())
-
-    idea_query = select(Idea).where(Idea.session_id == session_id)
-    idea_result = await db.execute(idea_query)
-    idea_count = len(idea_result.scalars().all())
-
-    return SessionResponse(
-        id=session.id,
-        title=session.title,
-        description=session.description,
-        start_time=session.start_time,
-        duration=session.duration,
-        status=session.status,
-        has_password=session.password_hash is not None,
-        accepting_ideas=session.accepting_ideas,
-        participant_count=participant_count,
-        idea_count=idea_count,
-        formatting_prompt=session.formatting_prompt,
-        summarization_prompt=session.summarization_prompt,
-        created_at=session.created_at,
-        ended_at=session.ended_at,
-    )
+    participant_count, idea_count = await _get_session_statistics(session_id, db)
+    return _to_session_response(session, participant_count, idea_count)
 
 
 @router.delete("/{session_id}")
