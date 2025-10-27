@@ -11,9 +11,10 @@ interface Props {
   selectedIdea: IdeaVisualization | null;
   onSelectIdea: (idea: IdeaVisualization | null) => void;
   hoveredIdeaId?: string | null;
+  currentUserId?: string;
 }
 
-export const VisualizationCanvas = ({ ideas, clusters, selectedIdea, onSelectIdea, hoveredIdeaId }: Props) => {
+export const VisualizationCanvas = ({ ideas, clusters, selectedIdea, onSelectIdea, hoveredIdeaId, currentUserId }: Props) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
@@ -23,37 +24,62 @@ export const VisualizationCanvas = ({ ideas, clusters, selectedIdea, onSelectIde
   const [hoveredIdea, setHoveredIdea] = useState<IdeaVisualization | null>(null);
   const [hoveredCluster, setHoveredCluster] = useState<ClusterData | null>(null);
   const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 });
-  const [latestIdeaId, setLatestIdeaId] = useState<string | null>(null);
+  const [myLatestIdeaId, setMyLatestIdeaId] = useState<string | null>(null);
+  const [othersRecentIdeaIds, setOthersRecentIdeaIds] = useState<string[]>([]);
   const [pulseAnimation, setPulseAnimation] = useState(0);
   const animationFrameRef = useRef<number | null>(null);
+  const prevIdeasCountRef = useRef(ideas.length);
 
-  // Track latest idea and start pulse animation
+  // Track latest ideas and start pulse animation
   useEffect(() => {
     if (ideas.length === 0) return;
 
-    // Find the most recent idea by timestamp
-    const sortedIdeas = [...ideas].sort((a, b) =>
+    // Only update if new ideas were added (not on every re-render)
+    const ideasAdded = ideas.length > prevIdeasCountRef.current;
+    prevIdeasCountRef.current = ideas.length;
+
+    if (!ideasAdded) return;
+
+    // Find my most recent idea
+    const myIdeas = currentUserId
+      ? ideas.filter(idea => idea.user_id === currentUserId)
+      : [];
+
+    if (myIdeas.length > 0) {
+      const sortedMyIdeas = [...myIdeas].sort((a, b) =>
+        new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+      );
+      const myNewest = sortedMyIdeas[0];
+
+      if (myNewest.id !== myLatestIdeaId) {
+        setMyLatestIdeaId(myNewest.id);
+        setPulseAnimation(0);
+
+        // Clear after 10 seconds
+        const timeout = setTimeout(() => {
+          setMyLatestIdeaId(null);
+        }, 10000);
+
+        return () => clearTimeout(timeout);
+      }
+    }
+
+    // Find others' 5 most recent ideas
+    const othersIdeas = currentUserId
+      ? ideas.filter(idea => idea.user_id !== currentUserId)
+      : ideas;
+
+    const sortedOthersIdeas = [...othersIdeas].sort((a, b) =>
       new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
     );
-    const newest = sortedIdeas[0];
+    const recentOthers = sortedOthersIdeas.slice(0, 5).map(idea => idea.id);
 
-    // If there's a new latest idea, start the pulse animation
-    if (newest.id !== latestIdeaId) {
-      setLatestIdeaId(newest.id);
-      setPulseAnimation(0);
-
-      // Clear after 5 seconds
-      const timeout = setTimeout(() => {
-        setLatestIdeaId(null);
-      }, 5000);
-
-      return () => clearTimeout(timeout);
-    }
-  }, [ideas, latestIdeaId]);
+    setOthersRecentIdeaIds(recentOthers);
+  }, [ideas, myLatestIdeaId, currentUserId]);
 
   // Pulse animation loop
   useEffect(() => {
-    if (!latestIdeaId) {
+    if (!myLatestIdeaId && othersRecentIdeaIds.length === 0) {
       if (animationFrameRef.current) {
         cancelAnimationFrame(animationFrameRef.current);
         animationFrameRef.current = null;
@@ -74,7 +100,7 @@ export const VisualizationCanvas = ({ ideas, clusters, selectedIdea, onSelectIde
         animationFrameRef.current = null;
       }
     };
-  }, [latestIdeaId]);
+  }, [myLatestIdeaId, othersRecentIdeaIds]);
 
   // Resize handler using ResizeObserver
   useEffect(() => {
@@ -210,7 +236,8 @@ export const VisualizationCanvas = ({ ideas, clusters, selectedIdea, onSelectIde
       const y = toScreenY(idea.y);
       const radius = 6;
       const isSelected = selectedIdea?.id === idea.id;
-      const isLatest = latestIdeaId === idea.id;
+      const isMyLatest = myLatestIdeaId === idea.id;
+      const isOthersRecent = othersRecentIdeaIds.includes(idea.id);
       const isHovered = hoveredIdeaId === idea.id;
       const isDimmed = hoveredIdeaId && !isHovered;
 
@@ -221,27 +248,55 @@ export const VisualizationCanvas = ({ ideas, clusters, selectedIdea, onSelectIde
         ctx.globalAlpha = 1.0;
       }
 
-      // Draw pulsing glow effect for latest idea
-      if (isLatest) {
+      // Draw pulsing glow effect for my latest idea (gold color)
+      if (isMyLatest) {
         const pulseValue = Math.sin(pulseAnimation) * 0.5 + 0.5; // 0 to 1
         const glowRadius = radius + 15 + pulseValue * 10;
 
-        // Outer glow (largest)
+        // Outer glow (largest) - gold
         const gradient1 = ctx.createRadialGradient(x, y, radius, x, y, glowRadius);
-        gradient1.addColorStop(0, `hsla(${idea.novelty_score * 1.2}, 80%, 70%, 0.6)`);
-        gradient1.addColorStop(0.5, `hsla(${idea.novelty_score * 1.2}, 80%, 70%, ${0.3 * pulseValue})`);
-        gradient1.addColorStop(1, `hsla(${idea.novelty_score * 1.2}, 80%, 70%, 0)`);
+        gradient1.addColorStop(0, `hsla(45, 90%, 60%, 0.7)`);
+        gradient1.addColorStop(0.5, `hsla(45, 90%, 60%, ${0.4 * pulseValue})`);
+        gradient1.addColorStop(1, `hsla(45, 90%, 60%, 0)`);
 
         ctx.beginPath();
         ctx.arc(x, y, glowRadius, 0, Math.PI * 2);
         ctx.fillStyle = gradient1;
         ctx.fill();
 
-        // Inner glow (medium)
+        // Inner glow (medium) - brighter gold
         const innerGlowRadius = radius + 8 + pulseValue * 5;
         const gradient2 = ctx.createRadialGradient(x, y, radius, x, y, innerGlowRadius);
-        gradient2.addColorStop(0, `hsla(${idea.novelty_score * 1.2}, 90%, 80%, 0.8)`);
-        gradient2.addColorStop(1, `hsla(${idea.novelty_score * 1.2}, 90%, 80%, 0)`);
+        gradient2.addColorStop(0, `hsla(45, 100%, 70%, 0.9)`);
+        gradient2.addColorStop(1, `hsla(45, 100%, 70%, 0)`);
+
+        ctx.beginPath();
+        ctx.arc(x, y, innerGlowRadius, 0, Math.PI * 2);
+        ctx.fillStyle = gradient2;
+        ctx.fill();
+      }
+
+      // Draw pulsing glow effect for others' recent ideas (cyan color)
+      if (isOthersRecent) {
+        const pulseValue = Math.sin(pulseAnimation) * 0.5 + 0.5; // 0 to 1
+        const glowRadius = radius + 10 + pulseValue * 6;
+
+        // Outer glow - cyan
+        const gradient1 = ctx.createRadialGradient(x, y, radius, x, y, glowRadius);
+        gradient1.addColorStop(0, `hsla(180, 80%, 60%, 0.5)`);
+        gradient1.addColorStop(0.5, `hsla(180, 80%, 60%, ${0.3 * pulseValue})`);
+        gradient1.addColorStop(1, `hsla(180, 80%, 60%, 0)`);
+
+        ctx.beginPath();
+        ctx.arc(x, y, glowRadius, 0, Math.PI * 2);
+        ctx.fillStyle = gradient1;
+        ctx.fill();
+
+        // Inner glow - brighter cyan
+        const innerGlowRadius = radius + 5 + pulseValue * 3;
+        const gradient2 = ctx.createRadialGradient(x, y, radius, x, y, innerGlowRadius);
+        gradient2.addColorStop(0, `hsla(180, 90%, 70%, 0.7)`);
+        gradient2.addColorStop(1, `hsla(180, 90%, 70%, 0)`);
 
         ctx.beginPath();
         ctx.arc(x, y, innerGlowRadius, 0, Math.PI * 2);

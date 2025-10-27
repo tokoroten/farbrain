@@ -345,6 +345,7 @@ export const BrainstormSession = () => {
               selectedIdea={selectedIdea}
               onSelectIdea={setSelectedIdea}
               hoveredIdeaId={hoveredIdeaId}
+              currentUserId={userId || undefined}
             />
           </div>
 
