@@ -6,6 +6,8 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useUserStore } from '../store/userStore';
 import { api } from '../lib/api';
+import { Button, Card } from '../components/common';
+import theme from '../styles/theme';
 
 export const Home = () => {
   const navigate = useNavigate();
@@ -64,16 +66,12 @@ export const Home = () => {
   return (
     <div style={{
       minHeight: '100vh',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
+      ...theme.layout.flexCenter,
       background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
     }}>
-      <div style={{
-        background: 'white',
-        padding: '3rem',
-        borderRadius: '1rem',
-        boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
+      <Card style={{
+        padding: theme.spacing['3xl'],
+        boxShadow: theme.shadows.xl,
         maxWidth: '600px',
         width: '90%',
         margin: '0 auto',
@@ -81,17 +79,17 @@ export const Home = () => {
         {/* Backend Connection Error */}
         {backendConnected === false && (
           <div style={{
-            padding: '0.75rem',
-            marginBottom: '1.5rem',
+            padding: theme.spacing.md,
+            marginBottom: theme.spacing.xl,
             background: '#ffebee',
-            border: '1px solid #ffcdd2',
-            borderRadius: '0.5rem',
-            color: '#c62828',
+            border: `1px solid ${theme.colors.error}`,
+            borderRadius: theme.borderRadius.md,
+            color: theme.colors.error,
             display: 'flex',
             alignItems: 'center',
-            gap: '0.5rem',
+            gap: theme.spacing.sm,
           }}>
-            <span style={{ fontSize: '1.2rem' }}>✗</span>
+            <span style={{ fontSize: theme.fontSize.lg }}>✗</span>
             <span>
               バックエンドに接続できません。サーバーが起動しているか確認してください。
             </span>
@@ -99,9 +97,9 @@ export const Home = () => {
         )}
 
         <h1 style={{
-          fontSize: '2.5rem',
+          fontSize: theme.fontSize['3xl'],
           fontWeight: 'bold',
-          marginBottom: '0.5rem',
+          marginBottom: theme.spacing.sm,
           textAlign: 'center',
           background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
           WebkitBackgroundClip: 'text',
@@ -111,21 +109,21 @@ export const Home = () => {
         </h1>
         <p style={{
           textAlign: 'center',
-          color: '#666',
-          marginBottom: '2rem',
+          color: theme.colors.textLight,
+          marginBottom: theme.spacing['2xl'],
         }}>
           LLM活用ゲーミフィケーションブレストツール
         </p>
 
         <form onSubmit={handleSubmit}>
-          <div style={{ marginBottom: '1.5rem' }}>
+          <div style={{ marginBottom: theme.spacing.xl }}>
             <label
               htmlFor="name"
               style={{
                 display: 'block',
-                marginBottom: '0.5rem',
+                marginBottom: theme.spacing.sm,
                 fontWeight: '600',
-                color: '#333',
+                color: theme.colors.text,
               }}
             >
               あなたの名前を入力してください
@@ -139,21 +137,15 @@ export const Home = () => {
               maxLength={100}
               disabled={isLoading}
               style={{
-                width: '100%',
-                padding: '0.75rem',
-                border: '2px solid #e0e0e0',
-                borderRadius: '0.5rem',
-                fontSize: '1rem',
-                transition: 'border-color 0.2s',
-                boxSizing: 'border-box',
+                ...theme.components.input.base,
+                border: `2px solid ${theme.colors.border}`,
               }}
-              onFocus={(e) => e.target.style.borderColor = '#667eea'}
-              onBlur={(e) => e.target.style.borderColor = '#e0e0e0'}
+              onFocus={(e) => e.target.style.borderColor = theme.colors.primary}
+              onBlur={(e) => e.target.style.borderColor = theme.colors.border}
             />
             <p style={{
-              fontSize: '0.875rem',
-              color: '#666',
-              marginTop: '0.5rem',
+              ...theme.typography.small,
+              marginTop: theme.spacing.sm,
             }}>
               セッション内で他の参加者に表示されます
             </p>
@@ -161,42 +153,36 @@ export const Home = () => {
 
           {error && (
             <div style={{
-              padding: '0.75rem',
-              marginBottom: '1rem',
-              background: '#fee',
-              border: '1px solid #fcc',
-              borderRadius: '0.5rem',
-              color: '#c33',
+              padding: theme.spacing.md,
+              marginBottom: theme.spacing.lg,
+              background: '#fee2e2',
+              border: `1px solid ${theme.colors.error}`,
+              borderRadius: theme.borderRadius.md,
+              color: theme.colors.error,
             }}>
               {error}
             </div>
           )}
 
-          <button
+          <Button
             type="submit"
             disabled={isLoading || !name.trim()}
+            fullWidth
             style={{
-              width: '100%',
-              padding: '0.875rem',
               background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-              color: 'white',
-              border: 'none',
-              borderRadius: '0.5rem',
-              fontSize: '1.1rem',
-              fontWeight: '600',
-              cursor: isLoading || !name.trim() ? 'not-allowed' : 'pointer',
+              fontSize: theme.fontSize.lg,
+              padding: theme.spacing.md,
               opacity: isLoading || !name.trim() ? 0.6 : 1,
-              transition: 'opacity 0.2s',
             }}
           >
             {isLoading ? '処理中...' : '続ける'}
-          </button>
+          </Button>
         </form>
 
         <div style={{
-          marginTop: '2rem',
-          paddingTop: '1.5rem',
-          borderTop: '1px solid #e0e0e0',
+          marginTop: theme.spacing['2xl'],
+          paddingTop: theme.spacing.xl,
+          borderTop: `1px solid ${theme.colors.border}`,
           textAlign: 'center',
         }}>
           <button
@@ -204,16 +190,16 @@ export const Home = () => {
             style={{
               background: 'none',
               border: 'none',
-              color: '#667eea',
+              color: theme.colors.primary,
               cursor: 'pointer',
-              fontSize: '0.95rem',
+              fontSize: theme.fontSize.base,
               textDecoration: 'underline',
             }}
           >
             管理者ページ
           </button>
         </div>
-      </div>
+      </Card>
     </div>
   );
 };
