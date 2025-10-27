@@ -11,6 +11,12 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.core.config import settings
+from backend.app.core.exceptions import (
+    SessionNotFoundError,
+    SessionNotAcceptingIdeasError,
+    SessionEndedError,
+    UserNotFoundError,
+)
 from backend.app.db.base import get_db
 from backend.app.models.cluster import Cluster
 from backend.app.models.idea import Idea
@@ -52,7 +58,10 @@ async def _verify_session_and_user(
         Tuple of (Session, User)
 
     Raises:
-        HTTPException: If session not found, not accepting ideas, ended, or user not found
+        SessionNotFoundError: If session does not exist
+        SessionNotAcceptingIdeasError: If session is not accepting new ideas
+        SessionEndedError: If session has ended
+        UserNotFoundError: If user not found in session
     """
     # Verify session
     session_result = await db.execute(
@@ -61,22 +70,13 @@ async def _verify_session_and_user(
     session = session_result.scalar_one_or_none()
 
     if not session:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Session not found"
-        )
+        raise SessionNotFoundError(session_id)
 
     if not session.accepting_ideas:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Session is not accepting new ideas"
-        )
+        raise SessionNotAcceptingIdeasError(session_id)
 
     if session.status == "ended":
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Session has ended"
-        )
+        raise SessionEndedError(session_id)
 
     # Verify user
     user_result = await db.execute(
@@ -88,10 +88,7 @@ async def _verify_session_and_user(
     user = user_result.scalar_one_or_none()
 
     if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found in this session"
-        )
+        raise UserNotFoundError(user_id, session_id)
 
     return session, user
 
