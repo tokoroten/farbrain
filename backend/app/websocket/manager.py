@@ -72,12 +72,14 @@ class ConnectionManager:
         y: float,
         cluster_id: int | None,
         novelty_score: float,
+        closest_idea_id: str | None = None,
+        timestamp: str | None = None,
     ) -> None:
         """Broadcast new idea creation to all session participants."""
         message = {
             "type": "idea_created",
             "data": {
-                "idea_id": str(idea_id),
+                "id": str(idea_id),
                 "user_id": str(user_id),
                 "user_name": user_name,
                 "formatted_text": formatted_text,
@@ -86,6 +88,8 @@ class ConnectionManager:
                 "y": y,
                 "cluster_id": cluster_id,
                 "novelty_score": novelty_score,
+                "closest_idea_id": str(closest_idea_id) if closest_idea_id else None,
+                "timestamp": timestamp,
             },
         }
         await self.broadcast_to_session(session_id, message)

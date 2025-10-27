@@ -308,6 +308,8 @@ async def create_idea(
         y=idea.y,
         cluster_id=idea.cluster_id,
         novelty_score=idea.novelty_score,
+        closest_idea_id=idea.closest_idea_id,
+        timestamp=idea.timestamp.isoformat(),
     )
 
     # Step 6: Trigger re-clustering or label update if needed
