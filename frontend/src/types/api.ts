@@ -109,6 +109,7 @@ export interface IdeaVisualization {
   raw_text: string;
   closest_idea_id: string | null;
   timestamp: string;
+  coordinates_recalculated?: boolean;
 }
 
 export interface VisualizationResponse {

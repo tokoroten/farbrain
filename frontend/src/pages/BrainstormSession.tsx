@@ -114,7 +114,14 @@ export const BrainstormSession = () => {
   function handleWebSocketMessage(event: WebSocketEvent) {
     switch (event.type) {
       case 'idea_created':
-        setIdeas((prev) => [...prev, event.data]);
+        // If coordinates were recalculated (UMAP re-fit), refresh entire visualization
+        if (event.data.coordinates_recalculated) {
+          console.log('UMAP recalculation detected - refreshing all visualization data');
+          fetchVisualizationData();
+        } else {
+          // Otherwise just add the new idea
+          setIdeas((prev) => [...prev, event.data]);
+        }
         break;
 
       case 'coordinates_updated':

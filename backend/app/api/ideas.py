@@ -153,6 +153,8 @@ async def create_idea(
 
     # Step 4: Assign coordinates
     need_cluster_update = False  # Flag to track if we need to update clusters
+    coordinates_recalculated = False  # Flag to indicate UMAP re-fit occurred
+
     if n_existing < settings.min_ideas_for_clustering - 1:
         # Random coordinates for first 9 ideas
         x = float(np.random.uniform(-10, 10))
@@ -173,6 +175,10 @@ async def create_idea(
             idea.x = float(clustering_result.coordinates[i, 0])
             idea.y = float(clustering_result.coordinates[i, 1])
             idea.cluster_id = int(clustering_result.cluster_labels[i])
+
+        # Mark that coordinates were recalculated
+        coordinates_recalculated = True
+        need_cluster_update = True
     else:
         # 11+ ideas: Use cached UMAP model's transform() method
         logger.info(f"[IDEA-CREATE] Processing idea #{n_existing + 1} for session {idea_data.session_id}")
@@ -205,6 +211,7 @@ async def create_idea(
 
             # Mark that we need to update clusters after creating the new idea
             need_cluster_update = True
+            coordinates_recalculated = True
         else:
             # Normal case: transform using existing model
             logger.info(f"[IDEA-CREATE] Using existing UMAP model to transform new idea")
@@ -310,6 +317,7 @@ async def create_idea(
         novelty_score=idea.novelty_score,
         closest_idea_id=idea.closest_idea_id,
         timestamp=idea.timestamp.isoformat(),
+        coordinates_recalculated=coordinates_recalculated,
     )
 
     # Step 6: Trigger re-clustering or label update if needed

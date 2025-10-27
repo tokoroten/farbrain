@@ -74,6 +74,7 @@ class ConnectionManager:
         novelty_score: float,
         closest_idea_id: str | None = None,
         timestamp: str | None = None,
+        coordinates_recalculated: bool = False,
     ) -> None:
         """Broadcast new idea creation to all session participants."""
         message = {
@@ -90,6 +91,7 @@ class ConnectionManager:
                 "novelty_score": novelty_score,
                 "closest_idea_id": str(closest_idea_id) if closest_idea_id else None,
                 "timestamp": timestamp,
+                "coordinates_recalculated": coordinates_recalculated,
             },
         }
         await self.broadcast_to_session(session_id, message)
