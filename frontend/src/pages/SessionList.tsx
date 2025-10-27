@@ -7,6 +7,8 @@ import { useNavigate } from 'react-router-dom';
 import { useUserStore } from '../store/userStore';
 import { api } from '../lib/api';
 import type { Session } from '../types/api';
+import { Button, Card } from '../components/common';
+import theme from '../styles/theme';
 
 export const SessionList = () => {
   const navigate = useNavigate();
@@ -46,7 +48,7 @@ export const SessionList = () => {
 
   if (isLoading) {
     return (
-      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ minHeight: '100vh', ...theme.layout.flexCenter }}>
         <div>読み込み中...</div>
       </div>
     );
@@ -62,68 +64,47 @@ export const SessionList = () => {
         maxWidth: '1600px',
         margin: '0 auto',
       }}>
-        <div style={{
-          background: 'white',
-          padding: '2rem',
-          borderRadius: '1rem',
-          marginBottom: '2rem',
-        }}>
-          <h1 style={{ fontSize: '2rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>
+        <Card style={{ padding: theme.spacing['2xl'], marginBottom: theme.spacing['2xl'] }}>
+          <h1 style={theme.typography.heading1}>
             セッション一覧
           </h1>
-          <p style={{ color: '#666' }}>
+          <p style={theme.typography.small}>
             ようこそ、{userName}さん
           </p>
-        </div>
+        </Card>
 
-        <div style={{
-          background: 'white',
-          padding: '1rem',
-          borderRadius: '1rem',
-          marginBottom: '1rem',
+        <Card style={{
+          padding: theme.spacing.lg,
+          marginBottom: theme.spacing.lg,
           display: 'flex',
-          gap: '1rem',
+          gap: theme.spacing.lg,
         }}>
-          <button
+          <Button
             onClick={() => setFilter('active')}
-            style={{
-              padding: '0.5rem 1rem',
-              background: filter === 'active' ? '#667eea' : 'white',
-              color: filter === 'active' ? 'white' : '#333',
-              border: '1px solid #667eea',
-              borderRadius: '0.5rem',
-              cursor: 'pointer',
-              fontWeight: '600',
-            }}
+            variant={filter === 'active' ? 'primary' : 'secondary'}
+            size="sm"
           >
             アクティブ
-          </button>
-          <button
+          </Button>
+          <Button
             onClick={() => setFilter('all')}
-            style={{
-              padding: '0.5rem 1rem',
-              background: filter === 'all' ? '#667eea' : 'white',
-              color: filter === 'all' ? 'white' : '#333',
-              border: '1px solid #667eea',
-              borderRadius: '0.5rem',
-              cursor: 'pointer',
-              fontWeight: '600',
-            }}
+            variant={filter === 'all' ? 'primary' : 'secondary'}
+            size="sm"
           >
             すべて
-          </button>
-        </div>
+          </Button>
+        </Card>
 
         {error && (
-          <div style={{
-            background: '#fee',
-            padding: '1rem',
-            borderRadius: '0.5rem',
-            marginBottom: '1rem',
-            color: '#c33',
+          <Card style={{
+            background: '#fee2e2',
+            padding: theme.spacing.lg,
+            marginBottom: theme.spacing.lg,
+            color: theme.colors.error,
+            border: `1px solid ${theme.colors.error}`,
           }}>
             {error}
-          </div>
+          </Card>
         )}
 
         <div style={{
@@ -132,78 +113,47 @@ export const SessionList = () => {
           gap: '1.5rem',
         }}>
           {sessions.length === 0 ? (
-            <div style={{
-              background: 'white',
-              padding: '3rem',
-              borderRadius: '1rem',
+            <Card style={{
+              padding: theme.spacing['3xl'],
               textAlign: 'center',
               gridColumn: '1 / -1',
             }}>
-              <p style={{ color: '#666', marginBottom: '1.5rem', fontSize: '1.1rem' }}>
+              <p style={{
+                ...theme.typography.body,
+                color: theme.colors.textLight,
+                marginBottom: theme.spacing.xl,
+                fontSize: theme.fontSize.lg,
+              }}>
                 セッションがまだ作成されていません
               </p>
-              <button
+              <Button
                 onClick={() => navigate('/admin')}
-                style={{
-                  padding: '1rem 2rem',
-                  background: '#667eea',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '0.5rem',
-                  fontSize: '1rem',
-                  cursor: 'pointer',
-                  fontWeight: '600',
-                  transition: 'background 0.2s',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = '#5568d3';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = '#667eea';
-                }}
+                variant="primary"
+                size="lg"
               >
                 プロジェクトを作成（管理者）
-              </button>
-            </div>
+              </Button>
+            </Card>
           ) : (
             sessions.map((session) => (
-              <div
+              <Card
                 key={session.id}
-                style={{
-                  background: 'white',
-                  padding: '1.5rem',
-                  borderRadius: '1rem',
-                  boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-                  transition: 'transform 0.2s',
-                  cursor: 'pointer',
-                }}
                 onClick={() => handleJoinSession(session.id)}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.transform = 'translateY(-4px)';
-                  e.currentTarget.style.boxShadow = '0 8px 24px rgba(0,0,0,0.15)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.transform = 'translateY(0)';
-                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.1)';
-                }}
+                hoverable
+                style={{ padding: theme.spacing.xl }}
               >
                 <div style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
+                  ...theme.layout.flexBetween,
                   alignItems: 'start',
-                  marginBottom: '1rem',
+                  marginBottom: theme.spacing.lg,
                 }}>
-                  <h3 style={{
-                    fontSize: '1.25rem',
-                    fontWeight: 'bold',
-                    marginBottom: '0.5rem',
-                  }}>
+                  <h3 style={theme.typography.heading3}>
                     {session.title}
                   </h3>
                   <span style={{
-                    padding: '0.25rem 0.75rem',
-                    borderRadius: '9999px',
-                    fontSize: '0.75rem',
+                    padding: `${theme.spacing.xs} ${theme.spacing.md}`,
+                    borderRadius: theme.borderRadius.full,
+                    fontSize: theme.fontSize.xs,
                     fontWeight: '600',
                     background: session.status === 'active' ? '#d4edda' : '#f8d7da',
                     color: session.status === 'active' ? '#155724' : '#721c24',
@@ -214,9 +164,9 @@ export const SessionList = () => {
 
                 {session.description && (
                   <p style={{
-                    color: '#666',
-                    marginBottom: '1rem',
-                    fontSize: '0.95rem',
+                    ...theme.typography.body,
+                    color: theme.colors.textLight,
+                    marginBottom: theme.spacing.lg,
                   }}>
                     {session.description}
                   </p>
@@ -224,10 +174,10 @@ export const SessionList = () => {
 
                 <div style={{
                   display: 'flex',
-                  gap: '1rem',
-                  marginBottom: '1rem',
-                  fontSize: '0.875rem',
-                  color: '#666',
+                  gap: theme.spacing.lg,
+                  marginBottom: theme.spacing.lg,
+                  fontSize: theme.fontSize.sm,
+                  color: theme.colors.textLight,
                 }}>
                   <div>
                     👥 {session.participant_count}人
@@ -242,17 +192,17 @@ export const SessionList = () => {
 
                 {!session.accepting_ideas && session.status === 'active' && (
                   <div style={{
-                    padding: '0.5rem',
+                    padding: theme.spacing.sm,
                     background: '#fff3cd',
-                    borderRadius: '0.25rem',
-                    fontSize: '0.875rem',
-                    color: '#856404',
-                    marginBottom: '0.5rem',
+                    borderRadius: theme.borderRadius.sm,
+                    fontSize: theme.fontSize.sm,
+                    color: theme.colors.warning,
+                    marginBottom: theme.spacing.sm,
                   }}>
                     現在アイディアを受付していません
                   </div>
                 )}
-              </div>
+              </Card>
             ))
           )}
         </div>
