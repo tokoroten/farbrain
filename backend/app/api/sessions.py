@@ -9,6 +9,7 @@ import numpy as np
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from backend.app.core.config import settings
 from backend.app.core.security import hash_password
@@ -255,8 +256,17 @@ async def list_sessions(
     active_only: bool = False,
     db: AsyncSession = Depends(get_db),
 ) -> SessionListResponse:
-    """List all brainstorming sessions."""
-    query = select(Session)
+    """
+    List all brainstorming sessions.
+
+    Uses eager loading to avoid N+1 query problem when fetching
+    participant and idea counts for each session.
+    """
+    # Build query with eager loading of users and ideas
+    query = select(Session).options(
+        selectinload(Session.users),
+        selectinload(Session.ideas)
+    )
 
     if active_only:
         query = query.where(Session.status == "active")
@@ -265,9 +275,11 @@ async def list_sessions(
     result = await db.execute(query)
     sessions = result.scalars().all()
 
+    # Build responses using preloaded relationships (no additional queries)
     session_responses = []
     for session in sessions:
-        participant_count, idea_count = await _get_session_statistics(session.id, db)
+        participant_count = len(session.users)
+        idea_count = len(session.ideas)
         session_responses.append(_to_session_response(session, participant_count, idea_count))
 
     return SessionListResponse(sessions=session_responses)

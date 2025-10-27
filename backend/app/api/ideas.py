@@ -33,24 +33,30 @@ logger = logging.getLogger(__name__)
 novelty_scorer = NoveltyScorer(min_distance_transform)
 
 
-@router.post("/", response_model=IdeaResponse, status_code=status.HTTP_201_CREATED)
-async def create_idea(
-    idea_data: IdeaCreate,
-    db: AsyncSession = Depends(get_db),
-) -> IdeaResponse:
+# Helper functions for create_idea endpoint
+
+async def _verify_session_and_user(
+    session_id: str,
+    user_id: str,
+    db: AsyncSession
+) -> tuple[Session, User]:
     """
-    Create a new idea with full ML pipeline:
-    1. Verify session and user
-    2. Format idea with LLM
-    3. Generate embedding
-    4. Calculate novelty score
-    5. Assign coordinates (random for <10 ideas, UMAP for 10+)
-    6. Trigger clustering if needed (every 10 ideas)
-    7. Update user score
+    Verify that session exists and user is part of it.
+
+    Args:
+        session_id: Session ID to verify
+        user_id: User ID to verify
+        db: Database session
+
+    Returns:
+        Tuple of (Session, User)
+
+    Raises:
+        HTTPException: If session not found, not accepting ideas, ended, or user not found
     """
     # Verify session
     session_result = await db.execute(
-        select(Session).where(Session.id == str(idea_data.session_id))
+        select(Session).where(Session.id == session_id)
     )
     session = session_result.scalar_one_or_none()
 
@@ -75,8 +81,8 @@ async def create_idea(
     # Verify user
     user_result = await db.execute(
         select(User).where(
-            User.session_id == str(idea_data.session_id),
-            User.user_id == str(idea_data.user_id)
+            User.session_id == session_id,
+            User.user_id == user_id
         )
     )
     user = user_result.scalar_one_or_none()
@@ -87,7 +93,103 @@ async def create_idea(
             detail="User not found in this session"
         )
 
-    # Get existing ideas for scoring and clustering
+    return session, user
+
+
+async def _format_and_embed_text(
+    raw_text: str,
+    skip_formatting: bool,
+    session: Session
+) -> tuple[str, np.ndarray]:
+    """
+    Format text with LLM (if needed) and generate embedding.
+
+    Args:
+        raw_text: Raw user input
+        skip_formatting: Whether to skip LLM formatting
+        session: Session object for context
+
+    Returns:
+        Tuple of (formatted_text, embedding_array)
+    """
+    # Format with LLM if requested
+    if skip_formatting:
+        formatted_text = raw_text
+    else:
+        formatted_text = await get_llm_service().format_idea(
+            raw_text,
+            custom_prompt=session.formatting_prompt,
+            session_context=session.description
+        )
+
+    # Generate embedding
+    embedding = await get_embedding_service().embed(formatted_text)
+    return formatted_text, embedding
+
+
+def _calculate_novelty_and_closest(
+    embedding: np.ndarray,
+    existing_ideas: list[Idea]
+) -> tuple[float, str | None]:
+    """
+    Calculate novelty score and find closest existing idea.
+
+    Args:
+        embedding: Embedding vector of new idea
+        existing_ideas: List of existing ideas in session
+
+    Returns:
+        Tuple of (novelty_score, closest_idea_id)
+    """
+    n_existing = len(existing_ideas)
+
+    if n_existing == 0:
+        return 100.0, None
+
+    existing_embeddings = np.array([idea.embedding for idea in existing_ideas])
+
+    # Calculate cosine similarities to find closest idea
+    similarities = cosine_similarity(
+        embedding.reshape(1, -1),
+        existing_embeddings
+    )[0]
+
+    # Find closest idea (highest similarity = most similar)
+    closest_idx = np.argmax(similarities)
+    closest_idea_id = str(existing_ideas[closest_idx].id)
+
+    # Calculate novelty score
+    novelty_score = novelty_scorer.calculate_score(
+        embedding.reshape(1, -1),
+        existing_embeddings
+    )
+
+    return novelty_score, closest_idea_id
+
+
+@router.post("/", response_model=IdeaResponse, status_code=status.HTTP_201_CREATED)
+async def create_idea(
+    idea_data: IdeaCreate,
+    db: AsyncSession = Depends(get_db),
+) -> IdeaResponse:
+    """
+    Create a new idea with full ML pipeline:
+    1. Verify session and user
+    2. Format idea with LLM
+    3. Generate embedding
+    4. Calculate novelty score
+    5. Assign coordinates (random for <10 ideas, UMAP for 10+)
+    6. Trigger clustering if needed (every 10 ideas)
+    7. Update user score
+    """
+    # Step 1: Verify session and user
+    session, user = await _verify_session_and_user(
+        str(idea_data.session_id),
+        str(idea_data.user_id),
+        db
+    )
+
+    # Step 2: Get existing ideas for scoring and clustering
     existing_ideas_result = await db.execute(
         select(Idea).where(Idea.session_id == str(idea_data.session_id))
     )
@@ -100,42 +202,19 @@ async def create_idea(
         fixed_cluster_count=session.fixed_cluster_count
     )
 
-    # Step 1: Format idea with LLM (with session context) - skip if requested
-    if idea_data.skip_formatting:
-        formatted_text = idea_data.raw_text
-    else:
-        formatted_text = await get_llm_service().format_idea(
-            idea_data.raw_text,
-            custom_prompt=session.formatting_prompt,
-            session_context=session.description
-        )
-
-    # Step 2: Generate embedding
-    embedding = await get_embedding_service().embed(formatted_text)
+    # Step 3: Format text and generate embedding
+    formatted_text, embedding = await _format_and_embed_text(
+        idea_data.raw_text,
+        idea_data.skip_formatting,
+        session
+    )
     embedding_list = embedding.tolist()
 
-    # Step 3: Calculate novelty score and find closest idea
-    closest_idea_id = None
-    if n_existing == 0:
-        novelty_score = 100.0  # First idea gets max score
-    else:
-        existing_embeddings = np.array([idea.embedding for idea in existing_ideas])
-
-        # Calculate cosine similarities to find closest idea
-        similarities = cosine_similarity(
-            embedding.reshape(1, -1),
-            existing_embeddings
-        )[0]
-
-        # Find closest idea (highest similarity = most similar)
-        closest_idx = np.argmax(similarities)
-        closest_idea_id = str(existing_ideas[closest_idx].id)
-
-        # Calculate novelty score
-        novelty_score = novelty_scorer.calculate_score(
-            embedding.reshape(1, -1),
-            existing_embeddings
-        )
+    # Step 4: Calculate novelty score and find closest idea
+    novelty_score, closest_idea_id = _calculate_novelty_and_closest(
+        embedding,
+        existing_ideas
+    )
 
     # Step 4: Assign coordinates
     need_cluster_update = False  # Flag to track if we need to update clusters
