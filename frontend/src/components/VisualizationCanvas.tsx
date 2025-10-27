@@ -307,7 +307,7 @@ export const VisualizationCanvas = ({ ideas, clusters, selectedIdea, onSelectIde
       // Draw circle
       ctx.beginPath();
       ctx.arc(x, y, radius + (isSelected || isHovered ? 3 : 0), 0, Math.PI * 2);
-      ctx.fillStyle = `hsl(${idea.novelty_score * 1.2}, 70%, ${isLatest ? 70 : 60}%)`;
+      ctx.fillStyle = `hsl(${idea.novelty_score * 1.2}, 70%, ${isMyLatest || isOthersRecent ? 70 : 60}%)`;
       ctx.fill();
 
       if (isSelected) {
@@ -322,13 +322,13 @@ export const VisualizationCanvas = ({ ideas, clusters, selectedIdea, onSelectIde
 
       // Draw border (brighter for latest idea)
       if (!isSelected && !isHovered) {
-        ctx.strokeStyle = isLatest ? '#fff' : 'white';
-        ctx.lineWidth = isLatest ? 3 : 2;
+        ctx.strokeStyle = (isMyLatest || isOthersRecent) ? '#fff' : 'white';
+        ctx.lineWidth = (isMyLatest || isOthersRecent) ? 3 : 2;
         ctx.stroke();
       }
 
       // Draw sparkle effect for latest idea
-      if (isLatest) {
+      if (isMyLatest) {
         const sparkleValue = Math.sin(pulseAnimation * 2) * 0.5 + 0.5;
         ctx.fillStyle = `rgba(255, 255, 255, ${sparkleValue})`;
         ctx.beginPath();
@@ -340,7 +340,7 @@ export const VisualizationCanvas = ({ ideas, clusters, selectedIdea, onSelectIde
     // Reset global alpha
     ctx.globalAlpha = 1.0;
 
-  }, [ideas, clusters, dimensions, transform, selectedIdea, latestIdeaId, pulseAnimation, hoveredIdeaId]);
+  }, [ideas, clusters, dimensions, transform, selectedIdea, myLatestIdeaId, othersRecentIdeaIds, pulseAnimation, hoveredIdeaId]);
 
   // Mouse handlers
   const handleMouseDown = (e: React.MouseEvent) => {
