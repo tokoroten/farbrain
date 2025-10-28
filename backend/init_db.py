@@ -1,8 +1,7 @@
 """Initialize database tables."""
 
 import asyncio
-from backend.app.db.base import engine
-from backend.app.models.base import Base
+from backend.app.db.base import engine, Base
 # Import all models to register them
 from backend.app.models.session import Session
 from backend.app.models.user import User
