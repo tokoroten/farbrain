@@ -5,6 +5,8 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
+import { Button, Card } from '../components/common';
+import theme from '../styles/theme';
 
 export const AdminPage = () => {
   const navigate = useNavigate();
@@ -100,44 +102,38 @@ export const AdminPage = () => {
     return (
       <div style={{
         minHeight: '100vh',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
+        ...theme.layout.flexCenter,
         background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
       }}>
-        <div style={{
-          background: 'white',
-          padding: '3rem',
-          borderRadius: '1rem',
-          boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
+        <Card style={{
+          padding: theme.spacing['3xl'],
+          boxShadow: theme.shadows.xl,
           maxWidth: '800px',
           width: '90%',
         }}>
           <h1 style={{
-            fontSize: '2rem',
-            fontWeight: 'bold',
-            marginBottom: '0.5rem',
+            ...theme.typography.heading1,
             textAlign: 'center',
           }}>
             管理者認証
           </h1>
           <p style={{
             textAlign: 'center',
-            color: '#666',
-            marginBottom: '2rem',
+            color: theme.colors.textLight,
+            marginBottom: theme.spacing['2xl'],
           }}>
             管理者パスワードを入力してください
           </p>
 
           <form onSubmit={handleAdminLogin}>
-            <div style={{ marginBottom: '1.5rem' }}>
+            <div style={{ marginBottom: theme.spacing.xl }}>
               <label
                 htmlFor="adminPassword"
                 style={{
                   display: 'block',
-                  marginBottom: '0.5rem',
+                  marginBottom: theme.spacing.sm,
                   fontWeight: '600',
-                  color: '#333',
+                  color: theme.colors.text,
                 }}
               >
                 パスワード
@@ -150,68 +146,53 @@ export const AdminPage = () => {
                 placeholder="パスワード"
                 disabled={isAuthLoading}
                 style={{
-                  width: '100%',
-                  padding: '0.75rem',
-                  border: '2px solid #e0e0e0',
-                  borderRadius: '0.5rem',
-                  fontSize: '1rem',
-                  boxSizing: 'border-box',
+                  ...theme.components.input.base,
+                  border: `2px solid ${theme.colors.border}`,
                 }}
               />
             </div>
 
             {authError && (
               <div style={{
-                padding: '0.75rem',
-                marginBottom: '1rem',
-                background: '#fee',
-                border: '1px solid #fcc',
-                borderRadius: '0.5rem',
-                color: '#c33',
+                padding: theme.spacing.md,
+                marginBottom: theme.spacing.lg,
+                background: '#fee2e2',
+                border: `1px solid ${theme.colors.error}`,
+                borderRadius: theme.borderRadius.md,
+                color: theme.colors.error,
               }}>
                 {authError}
               </div>
             )}
 
-            <button
+            <Button
               type="submit"
               disabled={isAuthLoading || !adminPassword.trim()}
+              fullWidth
               style={{
-                width: '100%',
-                padding: '0.875rem',
                 background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                color: 'white',
-                border: 'none',
-                borderRadius: '0.5rem',
-                fontSize: '1.1rem',
-                fontWeight: '600',
-                cursor: isAuthLoading || !adminPassword.trim() ? 'not-allowed' : 'pointer',
+                fontSize: theme.fontSize.lg,
+                padding: theme.spacing.md,
+                marginBottom: theme.spacing.lg,
                 opacity: isAuthLoading || !adminPassword.trim() ? 0.6 : 1,
-                marginBottom: '1rem',
               }}
             >
               {isAuthLoading ? '確認中...' : 'ログイン'}
-            </button>
+            </Button>
 
-            <button
+            <Button
               type="button"
               onClick={() => navigate('/sessions')}
+              variant="secondary"
+              fullWidth
               style={{
-                width: '100%',
-                padding: '0.875rem',
-                background: '#f0f0f0',
-                color: '#333',
-                border: 'none',
-                borderRadius: '0.5rem',
-                fontSize: '1rem',
-                fontWeight: '600',
-                cursor: 'pointer',
+                padding: theme.spacing.md,
               }}
             >
               戻る
-            </button>
+            </Button>
           </form>
-        </div>
+        </Card>
       </div>
     );
   }
@@ -222,48 +203,39 @@ export const AdminPage = () => {
       <div style={{
         minHeight: '100vh',
         background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-        padding: '1rem',
+        padding: theme.spacing.lg,
       }}>
         <div style={{
           maxWidth: '1600px',
           margin: '0 auto',
         }}>
-          <div style={{
-            background: 'white',
-            padding: '2rem',
-            borderRadius: '1rem',
+          <Card style={{
+            padding: theme.spacing['2xl'],
           }}>
             <div style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              marginBottom: '2rem',
+              ...theme.layout.flexBetween,
+              marginBottom: theme.spacing['2xl'],
             }}>
-              <h1 style={{ fontSize: '2rem', fontWeight: 'bold' }}>
+              <h1 style={theme.typography.heading1}>
                 管理者メニュー
               </h1>
-              <button
+              <Button
                 onClick={() => navigate('/')}
-                style={{
-                  padding: '0.5rem 1rem',
-                  background: '#f0f0f0',
-                  border: 'none',
-                  borderRadius: '0.5rem',
-                  cursor: 'pointer',
-                }}
+                variant="secondary"
+                size="sm"
               >
                 ホームへ戻る
-              </button>
+              </Button>
             </div>
 
             {error && (
               <div style={{
-                padding: '0.75rem',
-                marginBottom: '1.5rem',
-                background: '#fee',
-                border: '1px solid #fcc',
-                borderRadius: '0.5rem',
-                color: '#c33',
+                padding: theme.spacing.md,
+                marginBottom: theme.spacing.xl,
+                background: '#fee2e2',
+                border: `1px solid ${theme.colors.error}`,
+                borderRadius: theme.borderRadius.md,
+                color: theme.colors.error,
               }}>
                 {error}
               </div>
@@ -379,7 +351,7 @@ export const AdminPage = () => {
                 </div>
               </button>
             </div>
-          </div>
+          </Card>
         </div>
       </div>
     );
@@ -389,46 +361,38 @@ export const AdminPage = () => {
     <div style={{
       minHeight: '100vh',
       background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-      padding: '1rem',
+      padding: theme.spacing.lg,
     }}>
       <div style={{
         maxWidth: '1600px',
         margin: '0 auto',
       }}>
-        <div style={{
-          background: 'white',
-          padding: '2rem',
-          borderRadius: '1rem',
+        <Card style={{
+          padding: theme.spacing['2xl'],
         }}>
           <div style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            marginBottom: '2rem',
+            ...theme.layout.flexBetween,
+            marginBottom: theme.spacing['2xl'],
           }}>
-            <h1 style={{ fontSize: '2rem', fontWeight: 'bold' }}>
+            <h1 style={theme.typography.heading1}>
               新規セッション作成
             </h1>
-            <button
+            <Button
               onClick={() => setSelectedAction('menu')}
-              style={{
-                padding: '0.5rem 1rem',
-                background: '#f0f0f0',
-                border: 'none',
-                borderRadius: '0.5rem',
-                cursor: 'pointer',
-              }}
+              variant="secondary"
+              size="sm"
             >
               戻る
-            </button>
+            </Button>
           </div>
 
           <form onSubmit={handleSubmit}>
-            <div style={{ marginBottom: '1.5rem' }}>
+            <div style={{ marginBottom: theme.spacing.xl }}>
               <label style={{
                 display: 'block',
-                marginBottom: '0.5rem',
+                marginBottom: theme.spacing.sm,
                 fontWeight: '600',
+                color: theme.colors.text,
               }}>
                 タイトル *
               </label>
@@ -440,21 +404,18 @@ export const AdminPage = () => {
                 maxLength={255}
                 disabled={isLoading}
                 style={{
-                  width: '100%',
-                  padding: '0.75rem',
-                  border: '2px solid #e0e0e0',
-                  borderRadius: '0.5rem',
-                  fontSize: '1rem',
-                  boxSizing: 'border-box',
+                  ...theme.components.input.base,
+                  border: `2px solid ${theme.colors.border}`,
                 }}
               />
             </div>
 
-            <div style={{ marginBottom: '1.5rem' }}>
+            <div style={{ marginBottom: theme.spacing.xl }}>
               <label style={{
                 display: 'block',
-                marginBottom: '0.5rem',
+                marginBottom: theme.spacing.sm,
                 fontWeight: '600',
+                color: theme.colors.text,
               }}>
                 説明
               </label>
@@ -465,12 +426,8 @@ export const AdminPage = () => {
                 rows={3}
                 disabled={isLoading}
                 style={{
-                  width: '100%',
-                  padding: '0.75rem',
-                  border: '2px solid #e0e0e0',
-                  borderRadius: '0.5rem',
-                  fontSize: '1rem',
-                  boxSizing: 'border-box',
+                  ...theme.components.input.base,
+                  border: `2px solid ${theme.colors.border}`,
                   resize: 'vertical',
                 }}
               />
@@ -539,11 +496,12 @@ export const AdminPage = () => {
               )}
             </div>
 
-            <div style={{ marginBottom: '1.5rem' }}>
+            <div style={{ marginBottom: theme.spacing.xl }}>
               <label style={{
                 display: 'block',
-                marginBottom: '0.5rem',
+                marginBottom: theme.spacing.sm,
                 fontWeight: '600',
+                color: theme.colors.text,
               }}>
                 パスワード（オプション）
               </label>
@@ -554,12 +512,8 @@ export const AdminPage = () => {
                 placeholder="空欄の場合はパスワード保護なし"
                 disabled={isLoading}
                 style={{
-                  width: '100%',
-                  padding: '0.75rem',
-                  border: '2px solid #e0e0e0',
-                  borderRadius: '0.5rem',
-                  fontSize: '1rem',
-                  boxSizing: 'border-box',
+                  ...theme.components.input.base,
+                  border: `2px solid ${theme.colors.border}`,
                 }}
               />
             </div>
@@ -641,37 +595,32 @@ export const AdminPage = () => {
 
             {error && (
               <div style={{
-                padding: '0.75rem',
-                marginBottom: '1rem',
-                background: '#fee',
-                border: '1px solid #fcc',
-                borderRadius: '0.5rem',
-                color: '#c33',
+                padding: theme.spacing.md,
+                marginBottom: theme.spacing.lg,
+                background: '#fee2e2',
+                border: `1px solid ${theme.colors.error}`,
+                borderRadius: theme.borderRadius.md,
+                color: theme.colors.error,
               }}>
                 {error}
               </div>
             )}
 
-            <button
+            <Button
               type="submit"
               disabled={isLoading || !formData.title.trim()}
+              fullWidth
               style={{
-                width: '100%',
-                padding: '0.875rem',
                 background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                color: 'white',
-                border: 'none',
-                borderRadius: '0.5rem',
-                fontSize: '1.1rem',
-                fontWeight: '600',
-                cursor: isLoading || !formData.title.trim() ? 'not-allowed' : 'pointer',
+                fontSize: theme.fontSize.lg,
+                padding: theme.spacing.md,
                 opacity: isLoading || !formData.title.trim() ? 0.6 : 1,
               }}
             >
               {isLoading ? '作成中...' : 'セッションを作成'}
-            </button>
+            </Button>
           </form>
-        </div>
+        </Card>
       </div>
     </div>
   );
