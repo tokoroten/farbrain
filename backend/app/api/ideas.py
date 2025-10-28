@@ -96,15 +96,20 @@ async def _verify_session_and_user(
 async def _format_and_embed_text(
     raw_text: str,
     skip_formatting: bool,
-    session: Session
+    session: Session,
+    existing_ideas: list[Idea]
 ) -> tuple[str, np.ndarray]:
     """
     Format text with LLM (if needed) and generate embedding.
+
+    If formatting is enabled, finds similar existing ideas and instructs LLM
+    to generate a differentiated idea.
 
     Args:
         raw_text: Raw user input
         skip_formatting: Whether to skip LLM formatting
         session: Session object for context
+        existing_ideas: List of existing ideas for similarity search
 
     Returns:
         Tuple of (formatted_text, embedding_array)
@@ -113,13 +118,32 @@ async def _format_and_embed_text(
     if skip_formatting:
         formatted_text = raw_text
     else:
+        # Generate temporary embedding from raw text to find similar ideas
+        similar_ideas_text = []
+        if existing_ideas:
+            temp_embedding = await get_embedding_service().embed(raw_text)
+            existing_embeddings = np.array([idea.embedding for idea in existing_ideas])
+
+            # Calculate similarities
+            similarities = cosine_similarity(
+                temp_embedding.reshape(1, -1),
+                existing_embeddings
+            )[0]
+
+            # Get top 5 most similar ideas
+            top_k = min(5, len(existing_ideas))
+            top_indices = np.argsort(similarities)[-top_k:][::-1]
+            similar_ideas_text = [existing_ideas[idx].formatted_text for idx in top_indices]
+
+        # Format with LLM, including similar ideas as context
         formatted_text = await get_llm_service().format_idea(
             raw_text,
             custom_prompt=session.formatting_prompt,
-            session_context=session.description
+            session_context=session.description,
+            similar_ideas=similar_ideas_text if similar_ideas_text else None
         )
 
-    # Generate embedding
+    # Generate final embedding from formatted text
     embedding = await get_embedding_service().embed(formatted_text)
     return formatted_text, embedding
 
@@ -212,7 +236,8 @@ async def create_idea(
     formatted_text, embedding = await _format_and_embed_text(
         idea_data.raw_text,
         idea_data.skip_formatting,
-        session
+        session,
+        existing_ideas
     )
     embedding_list = embedding.tolist()
 

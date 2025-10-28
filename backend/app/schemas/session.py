@@ -18,11 +18,11 @@ class SessionCreate(BaseModel):
         default=None,
         description="Session purpose/description"
     )
-    duration: int = Field(
+    duration: int | None = Field(
         default=7200,
         ge=60,
-        le=86400,
-        description="Session duration in seconds"
+        le=31536000,  # 1 year maximum
+        description="Session duration in seconds (None for unlimited)"
     )
     password: str | None = Field(
         default=None,
@@ -45,7 +45,7 @@ class SessionUpdate(BaseModel):
 
     title: str | None = Field(default=None, min_length=1, max_length=255)
     description: str | None = None
-    duration: int | None = Field(default=None, ge=60, le=86400)
+    duration: int | None = Field(default=None, ge=60, le=31536000)  # Up to 1 year
     password: str | None = None
     formatting_prompt: str | None = Field(default=None, max_length=2000)
     summarization_prompt: str | None = Field(default=None, max_length=2000)

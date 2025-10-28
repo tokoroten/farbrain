@@ -53,6 +53,15 @@ export interface SessionCreateRequest {
   summarization_prompt?: string;
 }
 
+export interface SessionUpdateRequest {
+  title?: string;
+  description?: string;
+  duration?: number;
+  password?: string;
+  formatting_prompt?: string;
+  summarization_prompt?: string;
+}
+
 export interface SessionListResponse {
   sessions: Session[];
 }

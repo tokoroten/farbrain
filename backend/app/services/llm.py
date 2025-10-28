@@ -6,8 +6,12 @@ Uses OpenAI GPT models for high-speed concurrent processing.
 
 from typing import Any
 import httpx
+import logging
+import time
 
 from backend.app.core.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 class OpenAIProvider:
@@ -54,6 +58,13 @@ class OpenAIProvider:
 
         messages.append({"role": "user", "content": prompt})
 
+        # Log LLM request
+        logger.info(f"[LLM REQUEST] Model: {self.model}, Temperature: {temperature}")
+        logger.info(f"[LLM REQUEST] System prompt: {system_prompt[:100] if system_prompt else 'None'}...")
+        logger.info(f"[LLM REQUEST] User prompt: {prompt[:200]}...")
+
+        start_time = time.time()
+
         async with httpx.AsyncClient() as client:
             response = await client.post(
                 self.base_url,
@@ -73,7 +84,14 @@ class OpenAIProvider:
             response.raise_for_status()
             data = response.json()
 
-            return data["choices"][0]["message"]["content"].strip()
+            result = data["choices"][0]["message"]["content"].strip()
+            elapsed_time = time.time() - start_time
+
+            # Log LLM response
+            logger.info(f"[LLM RESPONSE] Time: {elapsed_time:.2f}s")
+            logger.info(f"[LLM RESPONSE] Result: {result[:200]}...")
+
+            return result
 
     async def generate_stream(
         self,
@@ -184,6 +202,7 @@ class LLMService:
         raw_text: str,
         custom_prompt: str | None = None,
         session_context: str | None = None,
+        similar_ideas: list[str] | None = None,
     ) -> str:
         """
         Format raw user input into structured idea.
@@ -193,6 +212,7 @@ class LLMService:
             custom_prompt: Optional custom formatting prompt.
                           If None, uses default prompt.
             session_context: Optional session description/theme for context
+            similar_ideas: Optional list of existing similar ideas to differentiate from
 
         Returns:
             Formatted idea text
@@ -201,6 +221,8 @@ class LLMService:
             ValueError: If raw_text is empty
             httpx.HTTPError: If LLM API fails
         """
+        logger.info(f"[LLM METHOD] format_idea() called with raw_text='{raw_text[:100]}...', has_custom_prompt={custom_prompt is not None}, has_session_context={session_context is not None}, similar_ideas_count={len(similar_ideas) if similar_ideas else 0}")
+
         if not raw_text.strip():
             raise ValueError("Raw text cannot be empty")
 
@@ -227,6 +249,16 @@ class LLMService:
             prompt = f"""以下のアイデアを整形してください:
 
 {raw_text}"""
+
+            # Add similar ideas context to encourage differentiation
+            if similar_ideas:
+                similar_list = "\n".join(f"- {idea}" for idea in similar_ideas)
+                prompt += f"""
+
+既に投稿されている類似アイデア:
+{similar_list}
+
+上記の類似アイデアとは異なる角度・切り口で整形し、新しい視点を加えてください。"""
 
         formatted_text = await self.provider.generate(
             prompt,
@@ -257,6 +289,8 @@ class LLMService:
             ValueError: If raw_text is empty
             httpx.HTTPError: If LLM API fails
         """
+        logger.info(f"[LLM METHOD] deepen_idea() called with raw_text='{raw_text[:100]}...', has_conversation_history={conversation_history is not None}, has_session_context={session_context is not None}")
+
         if not raw_text.strip():
             raise ValueError("Raw text cannot be empty")
 
@@ -309,6 +343,8 @@ class LLMService:
             ValueError: If sample_ideas is empty
             httpx.HTTPError: If LLM API fails
         """
+        logger.info(f"[LLM METHOD] summarize_cluster() called with {len(sample_ideas)} sample ideas, has_custom_prompt={custom_prompt is not None}, has_session_context={session_context is not None}")
+
         if not sample_ideas:
             raise ValueError("Sample ideas cannot be empty")
 
@@ -360,6 +396,8 @@ class LLMService:
             ValueError: If conversation_history is empty
             httpx.HTTPError: If LLM API fails
         """
+        logger.info(f"[LLM METHOD] synthesize_idea_from_conversation() called with {len(conversation_history)} messages, has_session_context={session_context is not None}")
+
         if not conversation_history:
             raise ValueError("Conversation history cannot be empty")
 

@@ -14,7 +14,7 @@ export const IdeaInput = ({ onSubmit, sessionId }: Props) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [dialogueMode, setDialogueMode] = useState(false);
-  const [skipFormatting, setSkipFormatting] = useState(false);
+  const [skipFormatting, setSkipFormatting] = useState(true);
   const [conversationHistory, setConversationHistory] = useState<Array<{ role: string; content: string }>>([]);
   const [aiResponse, setAiResponse] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
@@ -299,7 +299,12 @@ export const IdeaInput = ({ onSubmit, sessionId }: Props) => {
           color: '#666',
         }}>
           <span>
-            {dialogueMode ? 'AIと対話しながらアイディアを磨きます' : 'LLMが自動で整形して可視化します'}
+            {dialogueMode
+              ? 'AIと対話しながらアイディアを磨きます'
+              : skipFormatting
+                ? '入力したアイディアをそのまま可視化します'
+                : 'AIがアイディアをブラッシュアップして可視化します'
+            }
           </span>
           <span>
             {text.length} / 2000
@@ -328,7 +333,7 @@ export const IdeaInput = ({ onSubmit, sessionId }: Props) => {
                 cursor: 'pointer',
               }}
             />
-            <span>LLM自動整形を有効にする</span>
+            <span>AIでアイディアをブラッシュアップする</span>
             <span style={{ color: '#999', fontSize: '0.8rem' }}>
               （オフの場合、入力したテキストがそのまま投稿されます）
             </span>

@@ -17,6 +17,18 @@ export const AdminSessionManagement = () => {
   const [deletingSessionId, setDeletingSessionId] = useState<string | null>(null);
   const [exportingSessionId, setExportingSessionId] = useState<string | null>(null);
 
+  // Edit session state
+  const [editingSession, setEditingSession] = useState<Session | null>(null);
+  const [editForm, setEditForm] = useState({
+    title: '',
+    description: '',
+    duration: 7200,
+    password: '',
+    formatting_prompt: '',
+    summarization_prompt: '',
+  });
+  const [isSaving, setIsSaving] = useState(false);
+
   // Admin authentication
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [adminPassword, setAdminPassword] = useState('');
@@ -97,6 +109,51 @@ export const AdminSessionManagement = () => {
       setError('CSVのエクスポートに失敗しました');
     } finally {
       setExportingSessionId(null);
+    }
+  };
+
+  const handleEditClick = (session: Session) => {
+    setEditingSession(session);
+    setEditForm({
+      title: session.title,
+      description: session.description || '',
+      duration: session.duration,
+      password: '', // Don't pre-fill password for security
+      formatting_prompt: session.formatting_prompt || '',
+      summarization_prompt: session.summarization_prompt || '',
+    });
+  };
+
+  const handleCancelEdit = () => {
+    setEditingSession(null);
+    setError(null);
+  };
+
+  const handleEditSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingSession) return;
+
+    setIsSaving(true);
+    setError(null);
+
+    try {
+      // Build update object with only non-empty values
+      const updateData: any = {};
+      if (editForm.title.trim()) updateData.title = editForm.title.trim();
+      if (editForm.description.trim()) updateData.description = editForm.description.trim();
+      if (editForm.duration) updateData.duration = editForm.duration;
+      if (editForm.password.trim()) updateData.password = editForm.password.trim();
+      if (editForm.formatting_prompt.trim()) updateData.formatting_prompt = editForm.formatting_prompt.trim();
+      if (editForm.summarization_prompt.trim()) updateData.summarization_prompt = editForm.summarization_prompt.trim();
+
+      await api.sessions.update(editingSession.id, updateData);
+      await fetchSessions();
+      setEditingSession(null);
+    } catch (err) {
+      console.error('Failed to update session:', err);
+      setError('セッションの更新に失敗しました');
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -389,6 +446,22 @@ export const AdminSessionManagement = () => {
 
                     <div style={{ display: 'flex', gap: '0.5rem' }}>
                       <button
+                        onClick={() => handleEditClick(session)}
+                        style={{
+                          padding: '0.5rem 1rem',
+                          background: '#667eea',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '0.5rem',
+                          fontSize: '0.875rem',
+                          cursor: 'pointer',
+                          fontWeight: '600',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        ✏️ 編集
+                      </button>
+                      <button
                         onClick={() => handleExport(session.id)}
                         disabled={exportingSessionId === session.id}
                         style={{
@@ -493,6 +566,203 @@ export const AdminSessionManagement = () => {
                   {deletingSessionId !== null ? '削除中...' : '削除'}
                 </button>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Edit session dialog */}
+        {editingSession && (
+          <div style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0,0,0,0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+            overflowY: 'auto',
+            padding: '1rem',
+          }}>
+            <div style={{
+              background: 'white',
+              padding: '2rem',
+              borderRadius: '1rem',
+              maxWidth: '600px',
+              width: '100%',
+              maxHeight: '90vh',
+              overflowY: 'auto',
+            }}>
+              <h2 style={{ marginBottom: '1.5rem', fontSize: '1.5rem', fontWeight: 'bold' }}>
+                セッション編集
+              </h2>
+
+              <form onSubmit={handleEditSubmit}>
+                <div style={{ marginBottom: '1rem' }}>
+                  <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '600' }}>
+                    タイトル
+                  </label>
+                  <input
+                    type="text"
+                    value={editForm.title}
+                    onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
+                    required
+                    style={{
+                      width: '100%',
+                      padding: '0.75rem',
+                      border: '2px solid #e0e0e0',
+                      borderRadius: '0.5rem',
+                      fontSize: '1rem',
+                      boxSizing: 'border-box',
+                    }}
+                  />
+                </div>
+
+                <div style={{ marginBottom: '1rem' }}>
+                  <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '600' }}>
+                    説明・コンテキスト
+                  </label>
+                  <textarea
+                    value={editForm.description}
+                    onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+                    rows={3}
+                    style={{
+                      width: '100%',
+                      padding: '0.75rem',
+                      border: '2px solid #e0e0e0',
+                      borderRadius: '0.5rem',
+                      fontSize: '1rem',
+                      boxSizing: 'border-box',
+                      resize: 'vertical',
+                    }}
+                    placeholder="セッションの目的やゴールを記述"
+                  />
+                </div>
+
+                <div style={{ marginBottom: '1rem' }}>
+                  <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '600' }}>
+                    期間（秒）
+                  </label>
+                  <input
+                    type="number"
+                    value={editForm.duration}
+                    onChange={(e) => setEditForm({ ...editForm, duration: parseInt(e.target.value) })}
+                    min={60}
+                    max={86400}
+                    required
+                    style={{
+                      width: '100%',
+                      padding: '0.75rem',
+                      border: '2px solid #e0e0e0',
+                      borderRadius: '0.5rem',
+                      fontSize: '1rem',
+                      boxSizing: 'border-box',
+                    }}
+                  />
+                  <div style={{ fontSize: '0.875rem', color: '#666', marginTop: '0.25rem' }}>
+                    {Math.floor(editForm.duration / 60)}分
+                  </div>
+                </div>
+
+                <div style={{ marginBottom: '1rem' }}>
+                  <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '600' }}>
+                    パスワード（変更する場合のみ入力）
+                  </label>
+                  <input
+                    type="password"
+                    value={editForm.password}
+                    onChange={(e) => setEditForm({ ...editForm, password: e.target.value })}
+                    style={{
+                      width: '100%',
+                      padding: '0.75rem',
+                      border: '2px solid #e0e0e0',
+                      borderRadius: '0.5rem',
+                      fontSize: '1rem',
+                      boxSizing: 'border-box',
+                    }}
+                    placeholder="空欄で変更なし"
+                  />
+                </div>
+
+                <div style={{ marginBottom: '1rem' }}>
+                  <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '600' }}>
+                    アイデア整形プロンプト
+                  </label>
+                  <textarea
+                    value={editForm.formatting_prompt}
+                    onChange={(e) => setEditForm({ ...editForm, formatting_prompt: e.target.value })}
+                    rows={3}
+                    style={{
+                      width: '100%',
+                      padding: '0.75rem',
+                      border: '2px solid #e0e0e0',
+                      borderRadius: '0.5rem',
+                      fontSize: '1rem',
+                      boxSizing: 'border-box',
+                      resize: 'vertical',
+                    }}
+                    placeholder="カスタム整形プロンプト（空欄でデフォルト）"
+                  />
+                </div>
+
+                <div style={{ marginBottom: '1.5rem' }}>
+                  <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '600' }}>
+                    クラスタ要約プロンプト
+                  </label>
+                  <textarea
+                    value={editForm.summarization_prompt}
+                    onChange={(e) => setEditForm({ ...editForm, summarization_prompt: e.target.value })}
+                    rows={3}
+                    style={{
+                      width: '100%',
+                      padding: '0.75rem',
+                      border: '2px solid #e0e0e0',
+                      borderRadius: '0.5rem',
+                      fontSize: '1rem',
+                      boxSizing: 'border-box',
+                      resize: 'vertical',
+                    }}
+                    placeholder="カスタム要約プロンプト（空欄でデフォルト）"
+                  />
+                </div>
+
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <button
+                    type="button"
+                    onClick={handleCancelEdit}
+                    disabled={isSaving}
+                    style={{
+                      flex: 1,
+                      padding: '0.75rem',
+                      background: '#f0f0f0',
+                      border: 'none',
+                      borderRadius: '0.5rem',
+                      cursor: isSaving ? 'not-allowed' : 'pointer',
+                      fontWeight: '600',
+                    }}
+                  >
+                    キャンセル
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSaving}
+                    style={{
+                      flex: 1,
+                      padding: '0.75rem',
+                      background: isSaving ? '#ccc' : '#667eea',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '0.5rem',
+                      cursor: isSaving ? 'not-allowed' : 'pointer',
+                      fontWeight: '600',
+                    }}
+                  >
+                    {isSaving ? '保存中...' : '保存'}
+                  </button>
+                </div>
+              </form>
             </div>
           </div>
         )}

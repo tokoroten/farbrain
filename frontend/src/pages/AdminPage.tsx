@@ -62,7 +62,7 @@ export const AdminPage = () => {
       const session = await api.sessions.create({
         title: formData.title.trim(),
         description: formData.description.trim() || undefined,
-        duration: isUnlimited ? 999999999 : formData.duration,
+        duration: isUnlimited ? 31536000 : formData.duration,  // 1 year for unlimited
         password: formData.password || undefined,
         formatting_prompt: formData.formatting_prompt || undefined,
         summarization_prompt: formData.summarization_prompt || undefined,

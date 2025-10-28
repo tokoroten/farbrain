@@ -28,9 +28,6 @@ from backend.app.schemas.session import (
     SessionResponse,
     SessionUpdate,
 )
-from backend.app.services.starter_ideas import generate_starter_ideas
-from backend.app.services.llm import get_llm_service
-from backend.app.services.embedding import EmbeddingService
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
 
@@ -93,116 +90,6 @@ def _to_session_response(
     )
 
 
-async def _create_starter_ideas_bg(
-    session_id: str,
-    system_user_id: str,
-    session_data: SessionCreate,
-) -> None:
-    """
-    Background task wrapper to create starter ideas for a new session.
-
-    Creates its own database session to avoid issues with closed sessions.
-    """
-    # Get a new database session for the background task
-    async for db in get_db():
-        try:
-            await _create_starter_ideas(session_id, system_user_id, session_data, db)
-        finally:
-            await db.close()
-        break  # Only need one iteration
-
-
-async def _create_starter_ideas(
-    session_id: str,
-    system_user_id: str,
-    session_data: SessionCreate,
-    db: AsyncSession,
-) -> None:
-    """
-    Create starter ideas for a new session.
-
-    Uses McDonald's theory to seed the session with mediocre ideas
-    that encourage participants to contribute better ones.
-    """
-    try:
-        # Generate starter idea texts
-        starter_texts = generate_starter_ideas(count=3)
-
-        # Initialize services
-        llm_service = get_llm_service()
-        embedding_service = EmbeddingService()
-
-        # Create each starter idea
-        for raw_text in starter_texts:
-            # Format idea with LLM (with session context)
-            formatted_text = await llm_service.format_idea(
-                raw_text,
-                custom_prompt=session_data.formatting_prompt,
-                session_context=session_data.description
-            )
-
-            # Generate embedding
-            embedding = await embedding_service.embed(formatted_text)
-            embedding_list = embedding.tolist()
-
-            # Assign random coordinates (starter ideas always use random)
-            x = float(np.random.uniform(-10, 10))
-            y = float(np.random.uniform(-10, 10))
-
-            # Create idea
-            idea = Idea(
-                session_id=session_id,
-                user_id=system_user_id,
-                raw_text=raw_text,
-                formatted_text=formatted_text,
-                embedding=embedding_list,
-                x=x,
-                y=y,
-                cluster_id=None,
-                novelty_score=50.0,  # Mediocre score for starter ideas
-            )
-
-            db.add(idea)
-
-        # Update system user idea count
-        result = await db.execute(
-            select(User).where(User.user_id == system_user_id)
-        )
-        system_user = result.scalar_one_or_none()
-        if system_user:
-            system_user.idea_count = 3
-            system_user.total_score = 150.0  # 3 ideas * 50 score
-
-        await db.commit()
-
-        # Broadcast new ideas via WebSocket
-        ideas_result = await db.execute(
-            select(Idea).where(
-                Idea.session_id == session_id,
-                Idea.user_id == system_user_id
-            )
-        )
-        ideas = ideas_result.scalars().all()
-
-        for idea in ideas:
-            await manager.send_idea_created(
-                session_id=session_id,
-                idea_id=idea.id,
-                user_id=idea.user_id,
-                user_name="システム",
-                formatted_text=idea.formatted_text,
-                raw_text=idea.raw_text,
-                x=idea.x,
-                y=idea.y,
-                cluster_id=idea.cluster_id,
-                novelty_score=idea.novelty_score,
-            )
-
-    except Exception as e:
-        # Log error but don't fail session creation
-        print(f"Error creating starter ideas: {e}")
-
-
 @router.post("/", response_model=SessionResponse, status_code=status.HTTP_201_CREATED)
 async def create_session(
     session_data: SessionCreate,
@@ -243,12 +130,6 @@ async def create_session(
     db.add(system_user)
     await db.commit()
     await db.refresh(system_user)
-
-    # Generate and add starter ideas in background
-    # Note: Pass session ID and user_id, not the db session (it will be closed)
-    asyncio.create_task(
-        _create_starter_ideas_bg(session.id, system_user.user_id, session_data)
-    )
 
     # Return response with initial counts (system user, no ideas yet)
     return _to_session_response(session, participant_count=1, idea_count=0)

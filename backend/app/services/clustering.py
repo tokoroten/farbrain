@@ -71,28 +71,33 @@ class ClusteringService:
         """
         Calculate optimal number of clusters.
 
-        Uses cube root formula: max(5, ceil(n_ideas^(1/3)))
-        If fixed_cluster_count is set, uses that value instead.
+        Uses cube root formula with constraint that each cluster should have
+        at least 3 ideas (minimum for convex hull).
 
         Args:
             n_ideas: Number of ideas
 
         Returns:
-            Number of clusters (minimum 5)
+            Number of clusters
         """
         # If fixed cluster count is set, use it
         if self.fixed_cluster_count is not None:
             return max(2, min(self.fixed_cluster_count, n_ideas))
 
         if n_ideas < settings.min_ideas_for_clustering:
-            return 5  # Default minimum
+            return max(2, n_ideas // 3)  # At least 3 ideas per cluster
 
-        n_clusters = max(5, math.ceil(n_ideas ** (1 / 3)))
+        # Use cube root formula
+        n_clusters = max(2, math.ceil(n_ideas ** (1 / 3)))
+
+        # Ensure at least 3 ideas per cluster on average (for convex hull)
+        n_clusters = min(n_clusters, n_ideas // 3)
 
         # Cap at max_clusters
         n_clusters = min(n_clusters, settings.max_clusters)
 
-        return n_clusters
+        # Final safety check: minimum 2 clusters
+        return max(2, n_clusters)
 
     def _generate_random_coordinates(
         self,
@@ -169,6 +174,7 @@ class ClusteringService:
             min_dist=self.min_dist,
             metric="cosine",
             random_state=self.random_state,
+            n_jobs=-1,  # Use all available CPU cores
         )
 
         coordinates = self.umap_model.fit_transform(embeddings).astype(np.float64)
@@ -176,6 +182,7 @@ class ClusteringService:
 
         # K-means clustering
         n_clusters = self._calculate_n_clusters(n_ideas)
+        logger.info(f"[CLUSTERING] Calculated n_clusters={n_clusters} for {n_ideas} ideas (formula: max(5, ceil({n_ideas}^(1/3))))")
 
         self.kmeans_model = KMeans(
             n_clusters=n_clusters,
@@ -184,6 +191,7 @@ class ClusteringService:
         )
 
         cluster_labels = self.kmeans_model.fit_predict(coordinates)
+        logger.info(f"[CLUSTERING] K-means clustering completed. Unique cluster labels: {np.unique(cluster_labels)}")
 
         # Compute convex hulls
         convex_hulls = self._compute_convex_hulls(coordinates, cluster_labels)

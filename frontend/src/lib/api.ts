@@ -6,6 +6,7 @@ import axios from 'axios';
 import type {
   Session,
   SessionCreateRequest,
+  SessionUpdateRequest,
   SessionListResponse,
   SessionJoinRequest,
   User,
@@ -80,6 +81,11 @@ export const api = {
       const response = await apiClient.post(`/api/sessions/${sessionId}/toggle-accepting`, {
         accepting_ideas: accepting,
       });
+      return response.data;
+    },
+
+    update: async (sessionId: string, data: SessionUpdateRequest): Promise<Session> => {
+      const response = await apiClient.patch(`/api/sessions/${sessionId}`, data);
       return response.data;
     },
 

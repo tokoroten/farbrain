@@ -56,3 +56,8 @@ node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+# Cloudflare Tunnel
+.cloudflared/
+*cloudflared*.json
+cloudflare-tunnel-config.yml
