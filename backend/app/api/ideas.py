@@ -24,8 +24,8 @@ from backend.app.models.session import Session
 from backend.app.models.user import User
 from backend.app.schemas.idea import IdeaCreate, IdeaListResponse, IdeaResponse
 from backend.app.services.clustering import get_clustering_service
-from backend.app.services.embedding import EmbeddingService
-from backend.app.services.llm import LLMService
+from backend.app.services.embedding import EmbeddingService, get_embedding_service
+from backend.app.services.llm import LLMService, get_llm_service
 from backend.app.services.scoring import NoveltyScorer, min_distance_transform
 from backend.app.websocket.manager import manager
 from sklearn.metrics.pairwise import cosine_similarity
@@ -213,7 +213,10 @@ async def create_idea(
         existing_ideas
     )
 
-    # Step 4: Assign coordinates
+    # Extract existing embeddings for clustering
+    existing_embeddings = np.array([idea.embedding for idea in existing_ideas]) if existing_ideas else np.array([])
+
+    # Step 5: Assign coordinates
     need_cluster_update = False  # Flag to track if we need to update clusters
     coordinates_recalculated = False  # Flag to indicate UMAP re-fit occurred
 
@@ -493,6 +496,12 @@ async def update_cluster_labels(session_id: str, db: AsyncSession) -> None:
 
         if not session:
             return
+
+        # Get clustering service for this session
+        clustering_service = get_clustering_service(
+            session_id,
+            fixed_cluster_count=session.fixed_cluster_count
+        )
 
         # Get all ideas
         ideas_result = await db.execute(
