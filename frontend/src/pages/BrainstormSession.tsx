@@ -7,15 +7,13 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useUserStore } from '../store/userStore';
 import { useSessionStore } from '../store/sessionStore';
 import { useWebSocket } from '../hooks/useWebSocket';
+import { useSessionData } from '../hooks/useSessionData';
+import { useAdminActions } from '../hooks/useAdminActions';
 import { api } from '../lib/api';
 import { VisualizationCanvas } from '../components/VisualizationCanvas';
 import { Scoreboard } from '../components/Scoreboard';
 import { IdeaInput } from '../components/IdeaInput';
 import type {
-  Session,
-  IdeaVisualization,
-  ClusterData,
-  ScoreboardEntry,
   WebSocketEvent,
 } from '../types/api';
 
@@ -25,19 +23,45 @@ export const BrainstormSession = () => {
   const { userId, userName } = useUserStore();
   const { currentSessionId } = useSessionStore();
 
-  const [session, setSession] = useState<Session | null>(null);
-  const [ideas, setIdeas] = useState<IdeaVisualization[]>([]);
-  const [clusters, setClusters] = useState<ClusterData[]>([]);
-  const [scoreboard, setScoreboard] = useState<ScoreboardEntry[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [selectedIdea, setSelectedIdea] = useState<IdeaVisualization | null>(null);
+  // Session data management
+  const {
+    session,
+    ideas,
+    clusters,
+    scoreboard,
+    isLoading,
+    error: dataError,
+    setIdeas,
+    setClusters,
+    setScoreboard,
+    setSession,
+    fetchSessionData,
+    fetchVisualizationData,
+  } = useSessionData({ sessionId: sessionId! });
+
+  // Admin actions management
+  const {
+    showAdminDialog,
+    adminPassword,
+    clusteringInProgress,
+    clusterMode,
+    fixedClusterCount,
+    setShowAdminDialog,
+    setAdminPassword,
+    setClusterMode,
+    setFixedClusterCount,
+    handleRecalculateClick,
+    handleAdminSubmit: handleAdminSubmitHook,
+  } = useAdminActions({
+    sessionId: sessionId!,
+    onSuccess: fetchSessionData,
+    onError: (errorMsg) => setError(errorMsg),
+  });
+
+  // Component-specific state
+  const [selectedIdea, setSelectedIdea] = useState<any | null>(null);
   const [hoveredIdeaId, setHoveredIdeaId] = useState<string | null>(null);
-  const [showAdminDialog, setShowAdminDialog] = useState(false);
-  const [adminPassword, setAdminPassword] = useState('');
-  const [clusteringInProgress, setClusteringInProgress] = useState(false);
-  const [clusterMode, setClusterMode] = useState<'auto' | 'fixed'>('auto');
-  const [fixedClusterCount, setFixedClusterCount] = useState('');
+  const [error, setError] = useState<string | null>(null);
 
   // WebSocket connection
   const { isConnected } = useWebSocket({
@@ -45,6 +69,7 @@ export const BrainstormSession = () => {
     onMessage: handleWebSocketMessage,
   });
 
+  // Navigation guards
   useEffect(() => {
     if (!userId || !userName || !sessionId) {
       navigate('/');
@@ -55,61 +80,7 @@ export const BrainstormSession = () => {
       navigate(`/session/${sessionId}/join`);
       return;
     }
-
-    fetchSessionData();
-
-    // Auto-refresh scoreboard every 10 seconds
-    const scoreboardInterval = setInterval(async () => {
-      if (sessionId) {
-        try {
-          const scoreboardData = await api.visualization.getScoreboard(sessionId);
-          setScoreboard(scoreboardData.rankings);
-        } catch (err) {
-          console.error('Failed to refresh scoreboard:', err);
-        }
-      }
-    }, 10000);
-
-    return () => clearInterval(scoreboardInterval);
   }, [userId, userName, sessionId, currentSessionId, navigate]);
-
-  const fetchSessionData = async () => {
-    if (!sessionId) return;
-
-    setIsLoading(true);
-    setError(null);
-
-    try {
-      const [sessionData, vizData, scoreboardData] = await Promise.all([
-        api.sessions.get(sessionId),
-        api.visualization.get(sessionId),
-        api.visualization.getScoreboard(sessionId),
-      ]);
-
-      setSession(sessionData);
-      setIdeas(vizData.ideas);
-      setClusters(vizData.clusters);
-      setScoreboard(scoreboardData.rankings);
-    } catch (err) {
-      console.error('Failed to fetch session data:', err);
-      setError('データの取得に失敗しました');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const fetchVisualizationData = async () => {
-    if (!sessionId) return;
-
-    try {
-      const vizData = await api.visualization.get(sessionId);
-      setIdeas(vizData.ideas);
-      setClusters(vizData.clusters);
-      console.log('Visualization data refreshed (ideas and clusters only)');
-    } catch (err) {
-      console.error('Failed to refresh visualization data:', err);
-    }
-  };
 
   function handleWebSocketMessage(event: WebSocketEvent) {
     switch (event.type) {
@@ -181,46 +152,10 @@ export const BrainstormSession = () => {
     }
   };
 
-  const handleRecalculateClick = () => {
-    if (ideas.length < 10) {
-      alert('クラスタ再計算にはアイディアが10件以上必要です');
-      return;
-    }
-    setShowAdminDialog(true);
-  };
-
-  const handleAdminSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (!sessionId) return;
-
-    try {
-      const result = await api.auth.verifyAdmin(adminPassword);
-      if (!result.success) {
-        setError('管理者認証に失敗しました');
-        return;
-      }
-
-      setClusteringInProgress(true);
-      setShowAdminDialog(false);
-      setAdminPassword('');
-
-      // Prepare fixed_cluster_count parameter
-      const fixedCount = clusterMode === 'fixed' && fixedClusterCount
-        ? parseInt(fixedClusterCount, 10)
-        : null;
-
-      await api.debug.forceCluster(sessionId, true, fixedCount);
-
-      setError(null);
-      alert('クラスタリングが完了しました');
-      await fetchSessionData();
-    } catch (err) {
-      console.error('Failed to recalculate clustering:', err);
-      setError('クラスタリングの再計算に失敗しました');
-    } finally {
-      setClusteringInProgress(false);
-    }
+  // Wrap admin submit to combine hook logic with local error state
+  const handleAdminSubmit = (e: React.FormEvent) => {
+    setError(null);
+    return handleAdminSubmitHook(e);
   };
 
   if (isLoading) {
@@ -237,7 +172,7 @@ export const BrainstormSession = () => {
     );
   }
 
-  if (error || !session) {
+  if (dataError || !session) {
     return (
       <div style={{
         minHeight: '100vh',
@@ -247,7 +182,7 @@ export const BrainstormSession = () => {
         background: '#f5f5f5',
       }}>
         <div>
-          <p style={{ color: '#c33', marginBottom: '1rem' }}>{error || 'セッションが見つかりません'}</p>
+          <p style={{ color: '#c33', marginBottom: '1rem' }}>{dataError || error || 'セッションが見つかりません'}</p>
           <button onClick={() => navigate('/sessions')}>戻る</button>
         </div>
       </div>
@@ -291,7 +226,7 @@ export const BrainstormSession = () => {
         <div style={{ display: 'flex', gap: '0.5rem' }}>
           {ideas.length >= 10 && (
             <button
-              onClick={handleRecalculateClick}
+              onClick={() => handleRecalculateClick(ideas.length)}
               disabled={clusteringInProgress}
               style={{
                 padding: '0.5rem 1rem',
