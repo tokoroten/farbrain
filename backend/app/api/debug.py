@@ -769,8 +769,8 @@ async def create_test_session(
     await db.commit()
     logger.info("[TEST-SESSION] Updated user scores")
 
-    # Run clustering (WITHOUT LLM - using simple labels for test data)
-    logger.info("[TEST-SESSION] Running clustering (without LLM)...")
+    # Run clustering with LLM labels
+    logger.info("[TEST-SESSION] Running clustering with LLM labels...")
 
     # Get all ideas for clustering
     ideas_result = await db.execute(
@@ -801,7 +801,15 @@ async def create_test_session(
                     cluster_ideas[idea.cluster_id] = []
                 cluster_ideas[idea.cluster_id].append(idea)
 
-        # Create clusters with simple labels (NO LLM)
+        # Initialize LLM service for label generation
+        try:
+            llm_service = get_llm_service()
+            logger.info("[TEST-SESSION] LLM service initialized for cluster labeling")
+        except Exception as e:
+            logger.error(f"[TEST-SESSION] Failed to initialize LLM service: {e}")
+            llm_service = None
+
+        # Create clusters with LLM-generated labels
         for cluster_id, cluster_idea_list in cluster_ideas.items():
             cluster_coords = np.array(
                 [[idea.x, idea.y] for idea in cluster_idea_list]
@@ -814,14 +822,28 @@ async def create_test_session(
             )
 
             sampled_ideas = random.sample(
-                cluster_idea_list, min(3, len(cluster_idea_list))
+                cluster_idea_list, min(10, len(cluster_idea_list))
             )
 
-            # Simple label without LLM for test data
+            # Generate label with LLM
+            if llm_service:
+                try:
+                    sample_texts = [idea.formatted_text for idea in sampled_ideas]
+                    label = await llm_service.summarize_cluster(
+                        sample_texts,
+                        session_context=session.description
+                    )
+                    logger.info(f"[TEST-SESSION] Generated LLM label for cluster {cluster_id}: {label}")
+                except Exception as e:
+                    logger.error(f"[TEST-SESSION] Failed to generate LLM label for cluster {cluster_id}: {e}")
+                    label = f"クラスタ {cluster_id + 1}"  # Fallback to simple label
+            else:
+                label = f"クラスタ {cluster_id + 1}"  # Fallback if LLM not available
+
             cluster = Cluster(
                 id=cluster_id,
                 session_id=session_id,
-                label=f"クラスタ {cluster_id + 1}",  # Simple label, no LLM
+                label=label,
                 convex_hull_points=convex_hull_points,
                 sample_idea_ids=[str(idea.id) for idea in sampled_ideas],
                 idea_count=len(cluster_idea_list),
@@ -830,7 +852,7 @@ async def create_test_session(
             db.add(cluster)
 
         await db.commit()
-        logger.info(f"[TEST-SESSION] Created {len(cluster_ideas)} clusters (without LLM)")
+        logger.info(f"[TEST-SESSION] Created {len(cluster_ideas)} clusters with LLM labels")
 
     return {
         "message": "Test session created successfully",

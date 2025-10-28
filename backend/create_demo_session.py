@@ -328,7 +328,7 @@ async def create_demo_session():
 
         await db.commit()
 
-        print("\n✅ Demo session created successfully!")
+        print("\n[OK] Demo session created successfully!")
         print(f"Session ID: {session.id}")
         print(f"Total ideas: {len(ideas_to_create)}")
         print(f"Total clusters: {len(cluster_ideas)}")
