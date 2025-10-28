@@ -86,8 +86,9 @@ class TestIdeaWorkflow:
         created_ids = []
         for idea_text in ideas:
             response = await test_client_with_db.post(
-                f"/api/sessions/{session['id']}/ideas/",
+                "/api/ideas/",
                 json={
+                    "session_id": session["id"],
                     "user_id": user["user_id"],
                     "raw_text": idea_text,
                     "skip_formatting": True,
@@ -109,8 +110,9 @@ class TestIdeaWorkflow:
 
         # Create an idea first
         await test_client_with_db.post(
-            f"/api/sessions/{session['id']}/ideas/",
+            "/api/ideas/",
             json={
+                "session_id": session["id"],
                 "user_id": user["user_id"],
                 "raw_text": "Real-time collaboration tool",
                 "skip_formatting": True,
@@ -138,8 +140,9 @@ class TestIdeaWorkflow:
 
         # Create an idea to generate some score
         await test_client_with_db.post(
-            f"/api/sessions/{session['id']}/ideas/",
+            "/api/ideas/",
             json={
+                "session_id": session["id"],
                 "user_id": user["user_id"],
                 "raw_text": "Gamification platform",
                 "skip_formatting": True,
@@ -198,7 +201,8 @@ class TestIdeaWorkflow:
             },
         )
 
-        assert response.status_code == 404
+        # Returns 422 because session validation fails (FK constraint)
+        assert response.status_code == 422
 
     @pytest.mark.asyncio
     async def test_idea_formatting(
@@ -237,8 +241,9 @@ class TestIdeaWorkflow:
 
         for idea_text in ideas:
             response = await test_client_with_db.post(
-                f"/api/sessions/{session['id']}/ideas/",
+                "/api/ideas/",
                 json={
+                    "session_id": session["id"],
                     "user_id": user["user_id"],
                     "raw_text": idea_text,
                     "skip_formatting": True,
