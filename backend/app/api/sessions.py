@@ -351,78 +351,103 @@ async def export_session_ideas(
     db: AsyncSession = Depends(get_db),
 ) -> StreamingResponse:
     """Export all ideas from a session as CSV."""
-    # Verify session exists
-    session_result = await db.execute(
-        select(Session).where(Session.id == str(session_id))
-    )
-    session = session_result.scalar_one_or_none()
+    import logging
+    logger = logging.getLogger(__name__)
 
-    if not session:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Session not found"
+    logger.info(f"[CSV-EXPORT] Starting export for session {session_id}")
+
+    try:
+        # Verify session exists
+        session_result = await db.execute(
+            select(Session).where(Session.id == str(session_id))
         )
+        session = session_result.scalar_one_or_none()
 
-    # Get all ideas for this session
-    ideas_result = await db.execute(
-        select(Idea)
-        .where(Idea.session_id == str(session_id))
-        .order_by(Idea.timestamp)
-    )
-    ideas = ideas_result.scalars().all()
+        if not session:
+            logger.error(f"[CSV-EXPORT] Session {session_id} not found")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Session not found"
+            )
 
-    # Get all users for name lookup
-    users_result = await db.execute(
-        select(User).where(User.session_id == str(session_id))
-    )
-    users = {user.user_id: user.name for user in users_result.scalars().all()}
+        # Get all ideas for this session
+        ideas_result = await db.execute(
+            select(Idea)
+            .where(Idea.session_id == str(session_id))
+            .order_by(Idea.timestamp)
+        )
+        ideas = ideas_result.scalars().all()
+        logger.info(f"[CSV-EXPORT] Found {len(ideas)} ideas")
 
-    # Create CSV in memory
-    output = io.StringIO()
-    writer = csv.writer(output)
+        # Get all users for name lookup
+        users_result = await db.execute(
+            select(User).where(User.session_id == str(session_id))
+        )
+        users = {user.user_id: user.name for user in users_result.scalars().all()}
+        logger.info(f"[CSV-EXPORT] Found {len(users)} users")
 
-    # Write header
-    writer.writerow([
-        'ID',
-        'ユーザー名',
-        'ユーザーID',
-        '生テキスト',
-        '整形テキスト',
-        '新規性スコア',
-        'クラスタID',
-        'X座標',
-        'Y座標',
-        'タイムスタンプ',
-        '最も近いアイディアID',
-    ])
+        # Create CSV in memory with UTF-8 BOM for Excel compatibility
+        output = io.StringIO()
+        output.write('\ufeff')  # UTF-8 BOM
+        writer = csv.writer(output)
 
-    # Write data rows
-    for idea in ideas:
+        # Write header
         writer.writerow([
-            str(idea.id),
-            users.get(idea.user_id, "Unknown"),
-            str(idea.user_id),
-            idea.raw_text,
-            idea.formatted_text,
-            f"{idea.novelty_score:.2f}",
-            str(idea.cluster_id) if idea.cluster_id is not None else "",
-            f"{idea.x:.4f}",
-            f"{idea.y:.4f}",
-            idea.timestamp.isoformat(),
-            str(idea.closest_idea_id) if idea.closest_idea_id else "",
+            'ID',
+            'ユーザー名',
+            'ユーザーID',
+            '生テキスト',
+            '整形テキスト',
+            '新規性スコア',
+            'クラスタID',
+            'X座標',
+            'Y座標',
+            'タイムスタンプ',
+            '最も近いアイディアID',
         ])
 
-    # Prepare CSV for download
-    output.seek(0)
+        # Write data rows
+        for idea in ideas:
+            writer.writerow([
+                str(idea.id),
+                users.get(idea.user_id, "Unknown"),
+                str(idea.user_id),
+                idea.raw_text,
+                idea.formatted_text,
+                f"{idea.novelty_score:.2f}",
+                str(idea.cluster_id) if idea.cluster_id is not None else "",
+                f"{idea.x:.4f}",
+                f"{idea.y:.4f}",
+                idea.timestamp.isoformat(),
+                str(idea.closest_idea_id) if idea.closest_idea_id else "",
+            ])
 
-    # Create filename with session title and timestamp
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename = f"ideas_{session.title}_{timestamp}.csv"
+        # Prepare CSV for download
+        output.seek(0)
 
-    return StreamingResponse(
-        iter([output.getvalue()]),
-        media_type="text/csv",
-        headers={
-            "Content-Disposition": f'attachment; filename="{filename}"'
-        }
-    )
+        # Create filename with session title and timestamp
+        from urllib.parse import quote
+
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        # Create filename with Japanese characters supported
+        filename = f"ideas_{session.title}_{timestamp}.csv"
+        # URL-encode filename for Content-Disposition header (RFC 5987)
+        filename_encoded = quote(filename)
+
+        logger.info(f"[CSV-EXPORT] Successfully created CSV with {len(ideas)} rows, filename: {filename}")
+
+        # Return response with explicit CORS headers
+        # Use RFC 5987 encoding for non-ASCII filenames
+        return StreamingResponse(
+            iter([output.getvalue()]),
+            media_type="text/csv; charset=utf-8",
+            headers={
+                "Content-Disposition": f"attachment; filename*=UTF-8''{filename_encoded}",
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "GET, OPTIONS",
+                "Access-Control-Allow-Headers": "*",
+            }
+        )
+    except Exception as e:
+        logger.error(f"[CSV-EXPORT] Error exporting session {session_id}: {str(e)}", exc_info=True)
+        raise
