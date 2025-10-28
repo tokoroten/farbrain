@@ -126,14 +126,17 @@ async def _format_and_embed_text(
 
 def _calculate_novelty_and_closest(
     embedding: np.ndarray,
-    existing_ideas: list[Idea]
+    existing_ideas: list[Idea],
+    current_user_id: str
 ) -> tuple[float, str | None]:
     """
     Calculate novelty score and find closest existing idea.
+    If the closest idea belongs to the same user, apply a 0.5x penalty.
 
     Args:
         embedding: Embedding vector of new idea
         existing_ideas: List of existing ideas in session
+        current_user_id: User ID of the user submitting the new idea
 
     Returns:
         Tuple of (novelty_score, closest_idea_id)
@@ -153,13 +156,19 @@ def _calculate_novelty_and_closest(
 
     # Find closest idea (highest similarity = most similar)
     closest_idx = np.argmax(similarities)
-    closest_idea_id = str(existing_ideas[closest_idx].id)
+    closest_idea = existing_ideas[closest_idx]
+    closest_idea_id = str(closest_idea.id)
 
     # Calculate novelty score
     novelty_score = novelty_scorer.calculate_score(
         embedding.reshape(1, -1),
         existing_embeddings
     )
+
+    # Apply 0.5x penalty if closest idea is from the same user
+    if closest_idea.user_id == current_user_id:
+        novelty_score *= 0.5
+        logger.info(f"Applied 0.5x penalty: closest idea is from same user (score: {novelty_score:.2f})")
 
     return novelty_score, closest_idea_id
 
@@ -210,7 +219,8 @@ async def create_idea(
     # Step 4: Calculate novelty score and find closest idea
     novelty_score, closest_idea_id = _calculate_novelty_and_closest(
         embedding,
-        existing_ideas
+        existing_ideas,
+        idea_data.user_id
     )
 
     # Extract existing embeddings for clustering

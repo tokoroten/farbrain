@@ -235,7 +235,12 @@ async def create_demo_session():
                     existing_embeddings
                 )[0]
                 closest_idx = np.argmax(similarities)
-                closest_idea_id = str(ideas_to_create[closest_idx].id)
+                closest_idea = ideas_to_create[closest_idx]
+                closest_idea_id = str(closest_idea.id)
+
+                # Apply 0.5x penalty if closest idea is from the same user
+                if closest_idea.user_id == user.user_id:
+                    novelty_score *= 0.5
 
             idea = Idea(
                 session_id=session.id,

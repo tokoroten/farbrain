@@ -14,6 +14,20 @@ interface Props {
   currentUserId?: string;
 }
 
+// Generate consistent color for user based on user_id
+const getUserColor = (userId: string): string => {
+  // Simple hash function to generate consistent hue from user_id
+  let hash = 0;
+  for (let i = 0; i < userId.length; i++) {
+    hash = userId.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  // Map hash to hue (0-360)
+  const hue = Math.abs(hash % 360);
+  return `hsl(${hue}, 70%, 60%)`;
+};
+
+export const getUserColorFromId = getUserColor; // Export for use in Scoreboard
+
 export const VisualizationCanvas = ({ ideas, clusters, selectedIdea, onSelectIdea, hoveredIdeaId, currentUserId }: Props) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -307,7 +321,14 @@ export const VisualizationCanvas = ({ ideas, clusters, selectedIdea, onSelectIde
       // Draw circle
       ctx.beginPath();
       ctx.arc(x, y, radius + (isSelected || isHovered ? 3 : 0), 0, Math.PI * 2);
-      ctx.fillStyle = `hsl(${idea.novelty_score * 1.2}, 70%, ${isMyLatest || isOthersRecent ? 70 : 60}%)`;
+      // Use user-based color instead of score-based color
+      const userColor = getUserColor(idea.user_id);
+      // Brighten for latest ideas
+      const lightness = isMyLatest || isOthersRecent ? 70 : 60;
+      // Extract hue from user color and apply lightness
+      const hueMatch = userColor.match(/hsl\((\d+)/);
+      const hue = hueMatch ? hueMatch[1] : '200';
+      ctx.fillStyle = `hsl(${hue}, 70%, ${lightness}%)`;
       ctx.fill();
 
       if (isSelected) {

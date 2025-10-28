@@ -87,6 +87,33 @@ export const api = {
       const response = await apiClient.delete(`/api/sessions/${sessionId}`);
       return response.data;
     },
+
+    export: async (sessionId: string): Promise<void> => {
+      const response = await apiClient.get(`/api/sessions/${sessionId}/export`, {
+        responseType: 'blob',
+      });
+
+      // Create a download link
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+
+      // Extract filename from Content-Disposition header or use default
+      const contentDisposition = response.headers['content-disposition'];
+      let filename = `ideas_${sessionId}_${new Date().toISOString().split('T')[0]}.csv`;
+      if (contentDisposition) {
+        const filenameMatch = contentDisposition.match(/filename="?(.+)"?/);
+        if (filenameMatch) {
+          filename = filenameMatch[1];
+        }
+      }
+
+      link.setAttribute('download', filename);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    },
   },
 
   // Idea endpoints

@@ -15,6 +15,7 @@ export const AdminSessionManagement = () => {
   const [filter, setFilter] = useState<'all' | 'active'>('all');
   const [deleteConfirmSessionId, setDeleteConfirmSessionId] = useState<string | null>(null);
   const [deletingSessionId, setDeletingSessionId] = useState<string | null>(null);
+  const [exportingSessionId, setExportingSessionId] = useState<string | null>(null);
 
   // Admin authentication
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -82,6 +83,20 @@ export const AdminSessionManagement = () => {
       setError('セッションの削除に失敗しました');
     } finally {
       setDeletingSessionId(null);
+    }
+  };
+
+  const handleExport = async (sessionId: string) => {
+    setExportingSessionId(sessionId);
+    setError(null);
+
+    try {
+      await api.sessions.export(sessionId);
+    } catch (err) {
+      console.error('Failed to export session:', err);
+      setError('CSVのエクスポートに失敗しました');
+    } finally {
+      setExportingSessionId(null);
     }
   };
 
@@ -372,23 +387,42 @@ export const AdminSessionManagement = () => {
                       </div>
                     </div>
 
-                    <button
-                      onClick={() => handleDeleteClick(session.id)}
-                      disabled={deletingSessionId === session.id}
-                      style={{
-                        padding: '0.5rem 1rem',
-                        background: deletingSessionId === session.id ? '#ccc' : '#dc3545',
-                        color: 'white',
-                        border: 'none',
-                        borderRadius: '0.5rem',
-                        fontSize: '0.875rem',
-                        cursor: deletingSessionId === session.id ? 'not-allowed' : 'pointer',
-                        fontWeight: '600',
-                        whiteSpace: 'nowrap',
-                      }}
-                    >
-                      {deletingSessionId === session.id ? '削除中...' : '🗑 削除'}
-                    </button>
+                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                      <button
+                        onClick={() => handleExport(session.id)}
+                        disabled={exportingSessionId === session.id}
+                        style={{
+                          padding: '0.5rem 1rem',
+                          background: exportingSessionId === session.id ? '#ccc' : '#28a745',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '0.5rem',
+                          fontSize: '0.875rem',
+                          cursor: exportingSessionId === session.id ? 'not-allowed' : 'pointer',
+                          fontWeight: '600',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {exportingSessionId === session.id ? 'エクスポート中...' : '📥 CSV'}
+                      </button>
+                      <button
+                        onClick={() => handleDeleteClick(session.id)}
+                        disabled={deletingSessionId === session.id}
+                        style={{
+                          padding: '0.5rem 1rem',
+                          background: deletingSessionId === session.id ? '#ccc' : '#dc3545',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '0.5rem',
+                          fontSize: '0.875rem',
+                          cursor: deletingSessionId === session.id ? 'not-allowed' : 'pointer',
+                          fontWeight: '600',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {deletingSessionId === session.id ? '削除中...' : '🗑 削除'}
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))

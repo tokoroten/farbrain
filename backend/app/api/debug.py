@@ -100,7 +100,8 @@ async def create_bulk_ideas(
         embedding_list = embedding.tolist()
         all_embeddings.append(embedding)
 
-        # Calculate novelty score
+        # Calculate novelty score and find closest idea
+        closest_idea_id = None
         if len(all_embeddings) == 1:
             novelty_score = 100.0
         else:
@@ -108,6 +109,19 @@ async def create_bulk_ideas(
             novelty_score = novelty_scorer.calculate_score(
                 embedding.reshape(1, -1), existing_embeddings
             )
+
+            # Find closest idea (highest similarity)
+            similarities = cosine_similarity(
+                embedding.reshape(1, -1),
+                existing_embeddings
+            )[0]
+            closest_idx = np.argmax(similarities)
+            closest_idea = created_ideas[closest_idx]
+            closest_idea_id = str(closest_idea.id)
+
+            # Apply 0.5x penalty if closest idea is from the same user
+            if closest_idea.user_id == data.user_id:
+                novelty_score *= 0.5
 
         # Random coordinates for now
         x = float(np.random.uniform(-10, 10))
@@ -123,6 +137,7 @@ async def create_bulk_ideas(
             y=y,
             cluster_id=None,
             novelty_score=novelty_score,
+            closest_idea_id=closest_idea_id,
         )
 
         db.add(idea)
@@ -730,21 +745,37 @@ async def create_test_session(
         # Generate embedding
         embedding = await embedding_service.embed(idea_text)
 
-        # Calculate novelty score (compared to existing ideas)
+        # Calculate novelty score and find closest idea
         existing_embeddings = [idea.embedding for idea in created_ideas]
         novelty_score = novelty_scorer.calculate_score(embedding, existing_embeddings)
+
+        # Find closest idea and apply penalty if same user
+        closest_idea_id = None
+        if len(created_ideas) > 0:
+            similarities = cosine_similarity(
+                embedding.reshape(1, -1),
+                np.array(existing_embeddings)
+            )[0]
+            closest_idx = np.argmax(similarities)
+            closest_idea = created_ideas[closest_idx]
+            closest_idea_id = str(closest_idea.id)
+
+            # Apply 0.5x penalty if closest idea is from the same user
+            if closest_idea.user_id == user_id:
+                novelty_score *= 0.5
 
         # Create idea
         idea = Idea(
             id=str(uuid.uuid4()),
             session_id=session_id,
-            user_id=user_db_id,
+            user_id=user_id,  # Use user_id (UUID), not user_db_id (PK)
             raw_text=idea_text,
             formatted_text=idea_text,  # Skip LLM formatting for test data
             embedding=embedding.tolist(),
             x=0.0,  # Will be set by clustering
             y=0.0,  # Will be set by clustering
             novelty_score=novelty_score,
+            closest_idea_id=closest_idea_id,
         )
 
         db.add(idea)
@@ -755,7 +786,7 @@ async def create_test_session(
 
     # Update user scores
     for user_db_id, user_id, user_name in user_ids:
-        user_ideas = [idea for idea in created_ideas if idea.user_id == user_db_id]
+        user_ideas = [idea for idea in created_ideas if idea.user_id == user_id]  # Compare with user_id (UUID)
         total_score = sum(idea.novelty_score for idea in user_ideas)
         idea_count = len(user_ideas)
 

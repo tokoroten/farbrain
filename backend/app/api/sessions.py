@@ -1,12 +1,15 @@
 """Session management API endpoints."""
 
 import asyncio
+import csv
+import io
 from datetime import datetime, timedelta
 from uuid import UUID
 import uuid
 
 import numpy as np
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -459,3 +462,86 @@ async def delete_session(
     await db.commit()
 
     return {"message": "Session deleted successfully", "session_id": session_id}
+
+
+@router.get("/{session_id}/export")
+async def export_session_ideas(
+    session_id: UUID,
+    db: AsyncSession = Depends(get_db),
+) -> StreamingResponse:
+    """Export all ideas from a session as CSV."""
+    # Verify session exists
+    session_result = await db.execute(
+        select(Session).where(Session.id == str(session_id))
+    )
+    session = session_result.scalar_one_or_none()
+
+    if not session:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Session not found"
+        )
+
+    # Get all ideas for this session
+    ideas_result = await db.execute(
+        select(Idea)
+        .where(Idea.session_id == str(session_id))
+        .order_by(Idea.timestamp)
+    )
+    ideas = ideas_result.scalars().all()
+
+    # Get all users for name lookup
+    users_result = await db.execute(
+        select(User).where(User.session_id == str(session_id))
+    )
+    users = {user.user_id: user.name for user in users_result.scalars().all()}
+
+    # Create CSV in memory
+    output = io.StringIO()
+    writer = csv.writer(output)
+
+    # Write header
+    writer.writerow([
+        'ID',
+        'ユーザー名',
+        'ユーザーID',
+        '生テキスト',
+        '整形テキスト',
+        '新規性スコア',
+        'クラスタID',
+        'X座標',
+        'Y座標',
+        'タイムスタンプ',
+        '最も近いアイディアID',
+    ])
+
+    # Write data rows
+    for idea in ideas:
+        writer.writerow([
+            str(idea.id),
+            users.get(idea.user_id, "Unknown"),
+            str(idea.user_id),
+            idea.raw_text,
+            idea.formatted_text,
+            f"{idea.novelty_score:.2f}",
+            str(idea.cluster_id) if idea.cluster_id is not None else "",
+            f"{idea.x:.4f}",
+            f"{idea.y:.4f}",
+            idea.timestamp.isoformat(),
+            str(idea.closest_idea_id) if idea.closest_idea_id else "",
+        ])
+
+    # Prepare CSV for download
+    output.seek(0)
+
+    # Create filename with session title and timestamp
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"ideas_{session.title}_{timestamp}.csv"
+
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type="text/csv",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"'
+        }
+    )

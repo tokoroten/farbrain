@@ -4,6 +4,7 @@
 
 import { useState } from 'react';
 import type { ScoreboardEntry, IdeaVisualization } from '../types/api';
+import { getUserColorFromId } from './VisualizationCanvas';
 
 interface Props {
   rankings: ScoreboardEntry[];
@@ -89,7 +90,6 @@ export const Scoreboard = ({ rankings, currentUserId, myIdeas, allIdeas, onHover
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
               {rankings.map((entry) => {
                 const isCurrentUser = entry.user_id === currentUserId;
-                const medalEmoji = entry.rank === 1 ? '🥇' : entry.rank === 2 ? '🥈' : entry.rank === 3 ? '🥉' : '';
 
                 return (
                   <div
@@ -118,8 +118,20 @@ export const Scoreboard = ({ rankings, currentUserId, myIdeas, allIdeas, onHover
                           fontWeight: 'bold',
                           color: entry.rank <= 3 ? '#667eea' : '#666',
                         }}>
-                          #{entry.rank} {medalEmoji}
+                          #{entry.rank}
                         </span>
+                        <div
+                          style={{
+                            width: '16px',
+                            height: '16px',
+                            borderRadius: '50%',
+                            background: getUserColorFromId(entry.user_id),
+                            border: '2px solid white',
+                            boxShadow: '0 0 0 1px rgba(0,0,0,0.1)',
+                            flexShrink: 0,
+                          }}
+                          title={`${entry.user_name}の色`}
+                        />
                         <span style={{
                           fontWeight: isCurrentUser ? 'bold' : 'normal',
                         }}>
@@ -293,12 +305,38 @@ export const Scoreboard = ({ rankings, currentUserId, myIdeas, allIdeas, onHover
                             {closestIdea.formatted_text}
                           </div>
                           <div style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.25rem',
                             color: '#999',
                             fontSize: '0.7rem',
                             marginTop: '0.25rem',
                           }}>
-                            投稿者: {closestIdea.user_name}
+                            <span>投稿者:</span>
+                            <div
+                              style={{
+                                width: '12px',
+                                height: '12px',
+                                borderRadius: '50%',
+                                background: getUserColorFromId(closestIdea.user_id),
+                                border: '1.5px solid white',
+                                boxShadow: '0 0 0 1px rgba(0,0,0,0.1)',
+                                flexShrink: 0,
+                              }}
+                              title={`${closestIdea.user_name}の色`}
+                            />
+                            <span>{closestIdea.user_name}</span>
                           </div>
+                          {closestIdea.user_id === currentUserId && (
+                            <div style={{
+                              color: '#ff6b6b',
+                              fontSize: '0.7rem',
+                              marginTop: '0.25rem',
+                              fontWeight: '600',
+                            }}>
+                              ⚠️ 同じユーザーのため減点（0.5倍）
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
