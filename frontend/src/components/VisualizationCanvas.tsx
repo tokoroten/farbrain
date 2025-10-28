@@ -500,14 +500,27 @@ export const VisualizationCanvas = ({ ideas, clusters, selectedIdea, onSelectIde
     onSelectIdea(null);
   };
 
-  const handleWheel = (e: React.WheelEvent) => {
-    e.preventDefault();
-    const delta = e.deltaY > 0 ? 0.9 : 1.1;
-    setTransform({
-      ...transform,
-      scale: Math.max(0.1, Math.min(5, transform.scale * delta)),
-    });
-  };
+  // Wheel event handler setup with passive: false
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const handleWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const delta = e.deltaY > 0 ? 0.9 : 1.1;
+      setTransform((prev) => ({
+        ...prev,
+        scale: Math.max(0.1, Math.min(5, prev.scale * delta)),
+      }));
+    };
+
+    // Add event listener with passive: false to allow preventDefault
+    canvas.addEventListener('wheel', handleWheel, { passive: false });
+
+    return () => {
+      canvas.removeEventListener('wheel', handleWheel);
+    };
+  }, []);
 
   return (
     <div
@@ -528,7 +541,6 @@ export const VisualizationCanvas = ({ ideas, clusters, selectedIdea, onSelectIde
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp}
         onClick={handleClick}
-        onWheel={handleWheel}
         style={{
           display: 'block',
           width: '100%',
