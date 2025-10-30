@@ -1,7 +1,7 @@
 """Application configuration."""
 
 from typing import Literal
-from pydantic import Field
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -104,6 +104,71 @@ class Settings(BaseSettings):
         default=2000,
         description="Maximum length of idea text"
     )
+
+    @field_validator("log_level")
+    @classmethod
+    def validate_log_level(cls, v: str) -> str:
+        """Validate log level is valid."""
+        valid_levels = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
+        v_upper = v.upper()
+        if v_upper not in valid_levels:
+            raise ValueError(f"log_level must be one of {valid_levels}")
+        return v_upper
+
+    @field_validator("embedding_dimension")
+    @classmethod
+    def validate_embedding_dimension(cls, v: int) -> int:
+        """Validate embedding dimension is positive."""
+        if v <= 0:
+            raise ValueError("embedding_dimension must be positive")
+        return v
+
+    @field_validator("min_ideas_for_clustering", "clustering_interval", "reclustering_interval")
+    @classmethod
+    def validate_positive_int(cls, v: int) -> int:
+        """Validate integer is positive."""
+        if v <= 0:
+            raise ValueError(f"Value must be positive, got {v}")
+        return v
+
+    @field_validator("max_clusters")
+    @classmethod
+    def validate_max_clusters(cls, v: int) -> int:
+        """Validate max_clusters is within reasonable range."""
+        if v < 2:
+            raise ValueError("max_clusters must be at least 2")
+        if v > 100:
+            raise ValueError("max_clusters should not exceed 100 for performance")
+        return v
+
+    @field_validator("anomaly_contamination")
+    @classmethod
+    def validate_contamination(cls, v: float) -> float:
+        """Validate contamination is between 0 and 1."""
+        if not 0 < v < 1:
+            raise ValueError("anomaly_contamination must be between 0 and 1")
+        return v
+
+    @field_validator("umap_min_dist")
+    @classmethod
+    def validate_umap_min_dist(cls, v: float) -> float:
+        """Validate UMAP min_dist is between 0 and 1."""
+        if not 0 <= v <= 1:
+            raise ValueError("umap_min_dist must be between 0 and 1")
+        return v
+
+    @model_validator(mode="after")
+    def validate_clustering_intervals(self) -> "Settings":
+        """Validate clustering intervals are logically consistent."""
+        if self.clustering_interval >= self.reclustering_interval:
+            raise ValueError(
+                "clustering_interval must be less than reclustering_interval"
+            )
+        if self.min_ideas_for_clustering > self.clustering_interval:
+            raise ValueError(
+                "min_ideas_for_clustering should be less than or equal to clustering_interval"
+            )
+        return self
 
 
 # Global settings instance
