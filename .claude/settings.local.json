@@ -9,7 +9,20 @@
       "Bash(taskkill //F //PID 59096)",
       "Bash(copy:*)",
       "Bash(npm run build:*)",
-      "Bash(exit 0)"
+      "Bash(exit 0)",
+      "Bash(test:*)",
+      "Bash(cat:*)",
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$(cat <<''EOF''\nAdd multiple enhancements and fixes for production deployment\n\n## Features Added\n- **Cloudflare Tunnel support**: Add setup documentation and startup scripts for public deployment\n- **Admin session editing**: Allow editing session settings after creation (title, description, duration, prompts)\n- **Similar ideas context for LLM**: Find top 5 similar ideas and pass to LLM to encourage differentiation\n- **LLM request logging**: Add comprehensive logging for all LLM operations\n- **AI idea refinement option**: Add \"AIでアイディアをブラッシュアップする\" checkbox (default off)\n- **UMAP parallelization**: Enable n_jobs=-1 for faster clustering\n\n## Bug Fixes\n- **Remove starter ideas feature**: Eliminate automatic system-generated ideas on session creation\n- **Fix CORS configuration**: Use settings.cors_origins_list instead of hardcoded values\n- **Fix unlimited duration bug**: Increase max duration to 1 year (31536000 seconds)\n- **Fix clustering for small datasets**: Ensure at least 3 ideas per cluster for convex hull generation\n- **Fix missing import**: Add cosine_similarity import to debug.py\n- **Fix Vite host restrictions**: Allow access from Cloudflare Tunnel domains\n\n## Configuration Changes\n- Update CORS origins to support production domains\n- Remove --reload flag from production startup scripts\n- Add Cloudflare Tunnel files to .gitignore\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(uv run:*)",
+      "Bash(python test_report_generation.py:*)",
+      "Bash(uv add:*)",
+      "Bash(uv remove:*)",
+      "Bash(python -c:*)",
+      "Bash(python test_pdf_generation.py:*)",
+      "Bash(taskkill:*)"
     ],
     "deny": [],
     "ask": []

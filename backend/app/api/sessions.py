@@ -20,6 +20,7 @@ from backend.app.db.base import get_db
 from backend.app.models.session import Session
 from backend.app.models.user import User
 from backend.app.models.idea import Idea
+from backend.app.models.cluster import Cluster
 from backend.app.websocket.manager import manager
 from backend.app.schemas.session import (
     AcceptingIdeasToggle,
@@ -77,7 +78,6 @@ def _to_session_response(
         title=session.title,
         description=session.description,
         start_time=session.start_time,
-        duration=session.duration,
         status=session.status,
         has_password=session.password_hash is not None,
         accepting_ideas=session.accepting_ideas,
@@ -86,7 +86,6 @@ def _to_session_response(
         formatting_prompt=session.formatting_prompt,
         summarization_prompt=session.summarization_prompt,
         created_at=session.created_at,
-        ended_at=session.ended_at,
     )
 
 
@@ -107,7 +106,6 @@ async def create_session(
         title=session_data.title,
         description=session_data.description,
         start_time=start_time,
-        duration=session_data.duration,
         status="active",
         accepting_ideas=True,
         password_hash=hash_password(session_data.password) if session_data.password else None,
@@ -119,20 +117,8 @@ async def create_session(
     await db.commit()
     await db.refresh(session)
 
-    # Create system user for starter ideas
-    system_user = User(
-        user_id=str(uuid.uuid4()),
-        session_id=session.id,
-        name="システム",
-        total_score=0.0,
-        idea_count=0,
-    )
-    db.add(system_user)
-    await db.commit()
-    await db.refresh(system_user)
-
-    # Return response with initial counts (system user, no ideas yet)
-    return _to_session_response(session, participant_count=1, idea_count=0)
+    # Return response with initial counts (no users or ideas yet)
+    return _to_session_response(session, participant_count=0, idea_count=0)
 
 
 @router.get("/", response_model=SessionListResponse)
@@ -209,10 +195,10 @@ async def update_session(
         session.title = session_update.title
     if session_update.description is not None:
         session.description = session_update.description
-    if session_update.duration is not None:
-        session.duration = session_update.duration
     if session_update.password is not None:
         session.password_hash = hash_password(session_update.password)
+    if session_update.accepting_ideas is not None:
+        session.accepting_ideas = session_update.accepting_ideas
     if session_update.formatting_prompt is not None:
         session.formatting_prompt = session_update.formatting_prompt
     if session_update.summarization_prompt is not None:
@@ -247,7 +233,6 @@ async def end_session(
         )
 
     session.status = "ended"
-    session.ended_at = datetime.utcnow()
     session.accepting_ideas = False
 
     await db.commit()
@@ -308,7 +293,6 @@ async def delete_session(
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     """Delete a session and all related data (admin only)."""
-    from backend.app.models.cluster import Cluster
     from sqlalchemy import delete as sql_delete
 
     result = await db.execute(select(Session).where(Session.id == session_id))
@@ -386,6 +370,13 @@ async def export_session_ideas(
         users = {user.user_id: user.name for user in users_result.scalars().all()}
         logger.info(f"[CSV-EXPORT] Found {len(users)} users")
 
+        # Get all clusters for label lookup
+        clusters_result = await db.execute(
+            select(Cluster).where(Cluster.session_id == str(session_id))
+        )
+        clusters = {cluster.id: cluster.label for cluster in clusters_result.scalars().all()}
+        logger.info(f"[CSV-EXPORT] Found {len(clusters)} clusters")
+
         # Create CSV in memory with UTF-8 BOM for Excel compatibility
         output = io.StringIO()
         output.write('\ufeff')  # UTF-8 BOM
@@ -400,6 +391,7 @@ async def export_session_ideas(
             '整形テキスト',
             '新規性スコア',
             'クラスタID',
+            'クラスタ名',
             'X座標',
             'Y座標',
             'タイムスタンプ',
@@ -416,6 +408,7 @@ async def export_session_ideas(
                 idea.formatted_text,
                 f"{idea.novelty_score:.2f}",
                 str(idea.cluster_id) if idea.cluster_id is not None else "",
+                clusters.get(idea.cluster_id, "") if idea.cluster_id is not None else "",
                 f"{idea.x:.4f}",
                 f"{idea.y:.4f}",
                 idea.timestamp.isoformat(),

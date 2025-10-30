@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.app.core.security import verify_password
 from backend.app.db.base import get_db
 from backend.app.models.session import Session
 from backend.app.models.user import User
@@ -64,8 +65,8 @@ async def join_session(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Password required"
             )
-        # TODO: Proper password hashing comparison
-        if join_data.password != session.password_hash:
+        # Verify password using proper hashing comparison
+        if not verify_password(join_data.password, session.password_hash):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid password"

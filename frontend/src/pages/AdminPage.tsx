@@ -2,13 +2,30 @@
  * Admin page - Create new brainstorming sessions
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
 
+// Default prompts (matching backend defaults)
+const DEFAULT_FORMATTING_PROMPT = `あなたはブレインストーミングセッションのファシリテーターです。
+参加者の生のアイデアを、簡潔で具体的な形に整形するのがあなたの役割です。
+
+整形の原則:
+- 核心となるアイデアを明確に抽出する
+- 具体的で実現可能な表現にする
+- 感情的な表現を客観的に言い換える
+- 1-2文で簡潔にまとめる
+- 整形後のテキストのみを出力する(説明や前置きは不要)`;
+
+const DEFAULT_SUMMARIZATION_PROMPT = `以下のアイディアに共通するテーマを1-3語で要約してください。
+共通テーマ（1-3語のみ、説明不要）:`;
+
 export const AdminPage = () => {
   const navigate = useNavigate();
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(() => {
+    // Check if admin is already authenticated in this session
+    return sessionStorage.getItem('adminAuthenticated') === 'true';
+  });
   const [adminPassword, setAdminPassword] = useState('');
   const [authError, setAuthError] = useState<string | null>(null);
   const [isAuthLoading, setIsAuthLoading] = useState(false);
@@ -17,15 +34,13 @@ export const AdminPage = () => {
   const [formData, setFormData] = useState({
     title: '',
     description: '',
-    duration: 7200,
     password: '',
-    formatting_prompt: '',
-    summarization_prompt: '',
+    formatting_prompt: DEFAULT_FORMATTING_PROMPT,
+    summarization_prompt: DEFAULT_SUMMARIZATION_PROMPT,
   });
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
-  const [isUnlimited, setIsUnlimited] = useState(false);
 
   const handleAdminLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -36,6 +51,8 @@ export const AdminPage = () => {
       const result = await api.auth.verifyAdmin(adminPassword);
       if (result.success) {
         setIsAuthenticated(true);
+        // Save authentication state to sessionStorage
+        sessionStorage.setItem('adminAuthenticated', 'true');
       } else {
         setAuthError(result.message);
       }
@@ -62,7 +79,6 @@ export const AdminPage = () => {
       const session = await api.sessions.create({
         title: formData.title.trim(),
         description: formData.description.trim() || undefined,
-        duration: isUnlimited ? 31536000 : formData.duration,  // 1 year for unlimited
         password: formData.password || undefined,
         formatting_prompt: formData.formatting_prompt || undefined,
         summarization_prompt: formData.summarization_prompt || undefined,
@@ -474,69 +490,6 @@ export const AdminPage = () => {
                   resize: 'vertical',
                 }}
               />
-            </div>
-
-            <div style={{ marginBottom: '1.5rem' }}>
-              <label style={{
-                display: 'block',
-                marginBottom: '0.5rem',
-                fontWeight: '600',
-              }}>
-                セッション時間
-              </label>
-
-              <div style={{ marginBottom: '0.75rem' }}>
-                <label style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  cursor: 'pointer',
-                  fontSize: '0.95rem',
-                }}>
-                  <input
-                    type="checkbox"
-                    checked={isUnlimited}
-                    onChange={(e) => setIsUnlimited(e.target.checked)}
-                    disabled={isLoading}
-                    style={{
-                      marginRight: '0.5rem',
-                      width: '1.2rem',
-                      height: '1.2rem',
-                      cursor: 'pointer',
-                    }}
-                  />
-                  <span style={{ fontWeight: '500' }}>時間無制限</span>
-                </label>
-              </div>
-
-              {!isUnlimited && (
-                <>
-                  <input
-                    type="number"
-                    value={formData.duration}
-                    onChange={(e) => setFormData({ ...formData, duration: parseInt(e.target.value) })}
-                    min={60}
-                    max={86400}
-                    disabled={isLoading}
-                    style={{
-                      width: '100%',
-                      padding: '0.75rem',
-                      border: '2px solid #e0e0e0',
-                      borderRadius: '0.5rem',
-                      fontSize: '1rem',
-                      boxSizing: 'border-box',
-                    }}
-                  />
-                  <p style={{ fontSize: '0.875rem', color: '#666', marginTop: '0.5rem' }}>
-                    秒数を入力（デフォルト: 7200秒 = 2時間）
-                  </p>
-                </>
-              )}
-
-              {isUnlimited && (
-                <p style={{ fontSize: '0.875rem', color: '#667eea', marginTop: '0.5rem', fontWeight: '500' }}>
-                  ✓ このセッションは時間制限なしで実行されます
-                </p>
-              )}
             </div>
 
             <div style={{ marginBottom: '1.5rem' }}>

@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from backend.app.api import sessions, users, ideas, visualization, websocket, auth, dialogue, debug
+from backend.app.api import sessions, users, ideas, visualization, websocket, auth, dialogue, debug, reports
 from backend.app.core.config import settings
 from backend.app.core.exception_handlers import register_exception_handlers
 from backend.app.db.base import engine, Base
@@ -77,6 +77,7 @@ app.include_router(visualization.router, prefix="/api")
 app.include_router(dialogue.router)
 app.include_router(websocket.router)
 app.include_router(debug.router, prefix="/api")  # Debug endpoints
+app.include_router(reports.router, prefix="/api")  # Report endpoints
 
 
 @app.get("/")

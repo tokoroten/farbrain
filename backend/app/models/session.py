@@ -13,6 +13,7 @@ if TYPE_CHECKING:
     from backend.app.models.user import User
     from backend.app.models.idea import Idea
     from backend.app.models.cluster import Cluster
+    from backend.app.models.report import Report
 
 
 class SessionStatus(str, Enum):
@@ -30,14 +31,12 @@ class Session(Base):
         title: Session title
         description: Session purpose/description
         start_time: Session start timestamp
-        duration: Session duration in seconds
         status: Session status (active/ended)
         password_hash: Hashed password for protected sessions (nullable)
         accepting_ideas: Whether session is accepting new ideas
         formatting_prompt: Custom prompt for idea formatting
         summarization_prompt: Custom prompt for cluster summarization
         created_at: Creation timestamp
-        ended_at: End timestamp (nullable)
     """
 
     __tablename__ = "sessions"
@@ -55,7 +54,6 @@ class Session(Base):
         nullable=False,
         default=datetime.utcnow,
     )
-    duration: Mapped[int] = mapped_column(Integer, nullable=False)  # seconds
     status: Mapped[str] = mapped_column(
         String(20),
         nullable=False,
@@ -71,7 +69,6 @@ class Session(Base):
         nullable=False,
         default=datetime.utcnow,
     )
-    ended_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     # Relationships
     users: Mapped[list["User"]] = relationship(
@@ -86,6 +83,11 @@ class Session(Base):
     )
     clusters: Mapped[list["Cluster"]] = relationship(
         "Cluster",
+        back_populates="session",
+        cascade="all, delete-orphan",
+    )
+    reports: Mapped[list["Report"]] = relationship(
+        "Report",
         back_populates="session",
         cascade="all, delete-orphan",
     )

@@ -3,7 +3,7 @@
  */
 
 import { useState } from 'react';
-import type { ScoreboardEntry, IdeaVisualization } from '../types/api';
+import type { ScoreboardEntry, IdeaVisualization, ClusterData } from '../types/api';
 import { getUserColorFromId } from './VisualizationCanvas';
 
 interface Props {
@@ -11,12 +11,188 @@ interface Props {
   currentUserId: string;
   myIdeas: IdeaVisualization[];
   allIdeas: IdeaVisualization[];
+  clusters: ClusterData[];
   onHoverIdea?: (ideaId: string | null) => void;
+  onHoverUser?: (userId: string | null) => void;
 }
 
-type TabType = 'scoreboard' | 'myIdeas';
+type TabType = 'scoreboard' | 'myIdeas' | 'allIdeas';
 
-export const Scoreboard = ({ rankings, currentUserId, myIdeas, allIdeas, onHoverIdea }: Props) => {
+// Common idea card component
+const IdeaCard = ({
+  idea,
+  index,
+  allIdeas,
+  clusters,
+  currentUserId,
+  onHoverIdea,
+  showUserInfo = false,
+}: {
+  idea: IdeaVisualization;
+  index: number;
+  allIdeas: IdeaVisualization[];
+  clusters: ClusterData[];
+  currentUserId: string;
+  onHoverIdea?: (ideaId: string | null) => void;
+  showUserInfo?: boolean;
+}) => {
+  const isMyIdea = idea.user_id === currentUserId;
+  const closestIdea = idea.closest_idea_id
+    ? allIdeas.find(i => i.id === idea.closest_idea_id)
+    : null;
+
+  // Get cluster label
+  const cluster = clusters.find(c => c.id === idea.cluster_id);
+  const clusterLabel = cluster ? cluster.label : `クラスタ ${idea.cluster_id}`;
+
+  return (
+    <div
+      style={{
+        padding: '1rem',
+        background: isMyIdea && showUserInfo ? '#f0f7ff' : '#fafafa',
+        border: isMyIdea && showUserInfo ? '2px solid #667eea' : '1px solid #e0e0e0',
+        borderRadius: '0.5rem',
+        cursor: 'pointer',
+        transition: 'all 0.2s',
+      }}
+      onMouseEnter={() => onHoverIdea?.(idea.id)}
+      onMouseLeave={() => onHoverIdea?.(null)}
+    >
+      <div style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'start',
+        marginBottom: '0.5rem',
+      }}>
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.5rem',
+          fontSize: '0.875rem',
+          color: '#666',
+        }}>
+          <span>#{index + 1}</span>
+          {showUserInfo && (
+            <>
+              <div
+                style={{
+                  width: '14px',
+                  height: '14px',
+                  borderRadius: '50%',
+                  background: getUserColorFromId(idea.user_id),
+                  border: '2px solid white',
+                  boxShadow: '0 0 0 1px rgba(0,0,0,0.1)',
+                  flexShrink: 0,
+                }}
+                title={`${idea.user_name}の色`}
+              />
+              <span style={{ fontWeight: isMyIdea ? 'bold' : 'normal' }}>
+                {idea.user_name}
+                {isMyIdea && <span style={{ color: '#667eea' }}> (あなた)</span>}
+              </span>
+            </>
+          )}
+        </div>
+        <div style={{
+          padding: '0.25rem 0.75rem',
+          borderRadius: '9999px',
+          background: `hsl(${idea.novelty_score * 1.2}, 70%, 85%)`,
+          fontSize: '0.875rem',
+          fontWeight: '600',
+        }}>
+          {showUserInfo ? idea.novelty_score.toFixed(1) : `スコア: ${idea.novelty_score.toFixed(1)}`}
+        </div>
+      </div>
+
+      <div style={{
+        marginBottom: '0.5rem',
+        fontSize: '0.95rem',
+        lineHeight: '1.5',
+      }}>
+        {idea.formatted_text}
+      </div>
+
+      <div style={{
+        display: 'flex',
+        gap: '1rem',
+        fontSize: '0.75rem',
+        color: '#999',
+        marginBottom: closestIdea ? '0.5rem' : '0',
+      }}>
+        <span>
+          {idea.cluster_id !== null ? clusterLabel : 'クラスタ未割当'}
+        </span>
+        <span>
+          {new Date(idea.timestamp).toLocaleString('ja-JP', {
+            month: 'short',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+          })}
+        </span>
+      </div>
+
+      {closestIdea && (
+        <div style={{
+          padding: '0.75rem',
+          background: '#f0f7ff',
+          borderLeft: '3px solid #667eea',
+          borderRadius: '0.25rem',
+          fontSize: '0.875rem',
+        }}>
+          <div style={{
+            color: '#667eea',
+            fontWeight: '600',
+            marginBottom: '0.25rem',
+          }}>
+            💡 投稿時に最も近かったアイディア:
+          </div>
+          <div style={{
+            color: '#555',
+            lineHeight: '1.4',
+          }}>
+            {closestIdea.formatted_text}
+          </div>
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.25rem',
+            color: '#999',
+            fontSize: '0.7rem',
+            marginTop: '0.25rem',
+          }}>
+            <span>投稿者:</span>
+            <div
+              style={{
+                width: '12px',
+                height: '12px',
+                borderRadius: '50%',
+                background: getUserColorFromId(closestIdea.user_id),
+                border: '1.5px solid white',
+                boxShadow: '0 0 0 1px rgba(0,0,0,0.1)',
+                flexShrink: 0,
+              }}
+              title={`${closestIdea.user_name}の色`}
+            />
+            <span>{closestIdea.user_name}</span>
+          </div>
+          {closestIdea.user_id === idea.user_id && (
+            <div style={{
+              color: '#ff6b6b',
+              fontSize: '0.7rem',
+              marginTop: '0.25rem',
+              fontWeight: '600',
+            }}>
+              ⚠️ 同じユーザーのため減点（0.5倍）
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
+export const Scoreboard = ({ rankings, currentUserId, myIdeas, allIdeas, clusters, onHoverIdea, onHoverUser }: Props) => {
   const [activeTab, setActiveTab] = useState<TabType>('scoreboard');
 
   return (
@@ -45,10 +221,10 @@ export const Scoreboard = ({ rankings, currentUserId, myIdeas, allIdeas, onHover
               borderRadius: '0.5rem',
               cursor: 'pointer',
               fontWeight: '600',
-              fontSize: '0.875rem',
+              fontSize: '0.75rem',
             }}
           >
-            🏆 スコアボード
+            🏆 ランキング
           </button>
           <button
             onClick={() => setActiveTab('myIdeas')}
@@ -61,10 +237,26 @@ export const Scoreboard = ({ rankings, currentUserId, myIdeas, allIdeas, onHover
               borderRadius: '0.5rem',
               cursor: 'pointer',
               fontWeight: '600',
-              fontSize: '0.875rem',
+              fontSize: '0.75rem',
             }}
           >
-            💡 自分のアイディア ({myIdeas.length})
+            💡 自分 ({myIdeas.length})
+          </button>
+          <button
+            onClick={() => setActiveTab('allIdeas')}
+            style={{
+              flex: 1,
+              padding: '0.5rem',
+              background: activeTab === 'allIdeas' ? '#667eea' : '#f0f0f0',
+              color: activeTab === 'allIdeas' ? 'white' : '#666',
+              border: 'none',
+              borderRadius: '0.5rem',
+              cursor: 'pointer',
+              fontWeight: '600',
+              fontSize: '0.75rem',
+            }}
+          >
+            🌐 全員 ({allIdeas.length})
           </button>
         </div>
       </div>
@@ -100,7 +292,10 @@ export const Scoreboard = ({ rankings, currentUserId, myIdeas, allIdeas, onHover
                       border: isCurrentUser ? '2px solid #667eea' : '1px solid #e0e0e0',
                       borderRadius: '0.5rem',
                       transition: 'transform 0.2s',
+                      cursor: 'pointer',
                     }}
+                    onMouseEnter={() => onHoverUser?.(entry.user_id)}
+                    onMouseLeave={() => onHoverUser?.(null)}
                   >
                     <div style={{
                       display: 'flex',
@@ -195,7 +390,7 @@ export const Scoreboard = ({ rankings, currentUserId, myIdeas, allIdeas, onHover
               })}
             </div>
           )
-        ) : (
+        ) : activeTab === 'myIdeas' ? (
           // My Ideas view
           myIdeas.length === 0 ? (
             <div style={{
@@ -209,139 +404,46 @@ export const Scoreboard = ({ rankings, currentUserId, myIdeas, allIdeas, onHover
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
               {myIdeas
                 .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-                .map((idea, index) => {
-                  // Find the closest idea if it exists
-                  const closestIdea = idea.closest_idea_id
-                    ? allIdeas.find(i => i.id === idea.closest_idea_id)
-                    : null;
-
-                  return (
-                    <div
-                      key={idea.id}
-                      style={{
-                        padding: '1rem',
-                        background: '#fafafa',
-                        border: '1px solid #e0e0e0',
-                        borderRadius: '0.5rem',
-                        cursor: 'pointer',
-                        transition: 'all 0.2s',
-                      }}
-                      onMouseEnter={() => onHoverIdea?.(idea.id)}
-                      onMouseLeave={() => onHoverIdea?.(null)}
-                    >
-                      <div style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'start',
-                        marginBottom: '0.5rem',
-                      }}>
-                        <div style={{
-                          fontSize: '0.875rem',
-                          color: '#666',
-                        }}>
-                          #{index + 1}
-                        </div>
-                        <div style={{
-                          padding: '0.25rem 0.75rem',
-                          borderRadius: '9999px',
-                          background: `hsl(${idea.novelty_score * 1.2}, 70%, 85%)`,
-                          fontSize: '0.875rem',
-                          fontWeight: '600',
-                        }}>
-                          スコア: {idea.novelty_score.toFixed(1)}
-                        </div>
-                      </div>
-
-                      <div style={{
-                        marginBottom: '0.5rem',
-                        fontSize: '0.95rem',
-                        lineHeight: '1.5',
-                      }}>
-                        {idea.formatted_text}
-                      </div>
-
-                      <div style={{
-                        display: 'flex',
-                        gap: '1rem',
-                        fontSize: '0.75rem',
-                        color: '#999',
-                        marginBottom: closestIdea ? '0.5rem' : '0',
-                      }}>
-                        <span>
-                          {idea.cluster_id !== null ? `クラスタ: ${idea.cluster_id}` : 'クラスタ未割当'}
-                        </span>
-                        <span>
-                          座標: ({idea.x.toFixed(2)}, {idea.y.toFixed(2)})
-                        </span>
-                        <span>
-                          {new Date(idea.timestamp).toLocaleString('ja-JP', {
-                            month: 'short',
-                            day: 'numeric',
-                            hour: '2-digit',
-                            minute: '2-digit',
-                          })}
-                        </span>
-                      </div>
-
-                      {closestIdea && (
-                        <div style={{
-                          padding: '0.75rem',
-                          background: '#f0f7ff',
-                          borderLeft: '3px solid #667eea',
-                          borderRadius: '0.25rem',
-                          fontSize: '0.875rem',
-                        }}>
-                          <div style={{
-                            color: '#667eea',
-                            fontWeight: '600',
-                            marginBottom: '0.25rem',
-                          }}>
-                            💡 最も近いアイディア:
-                          </div>
-                          <div style={{
-                            color: '#555',
-                            lineHeight: '1.4',
-                          }}>
-                            {closestIdea.formatted_text}
-                          </div>
-                          <div style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '0.25rem',
-                            color: '#999',
-                            fontSize: '0.7rem',
-                            marginTop: '0.25rem',
-                          }}>
-                            <span>投稿者:</span>
-                            <div
-                              style={{
-                                width: '12px',
-                                height: '12px',
-                                borderRadius: '50%',
-                                background: getUserColorFromId(closestIdea.user_id),
-                                border: '1.5px solid white',
-                                boxShadow: '0 0 0 1px rgba(0,0,0,0.1)',
-                                flexShrink: 0,
-                              }}
-                              title={`${closestIdea.user_name}の色`}
-                            />
-                            <span>{closestIdea.user_name}</span>
-                          </div>
-                          {closestIdea.user_id === currentUserId && (
-                            <div style={{
-                              color: '#ff6b6b',
-                              fontSize: '0.7rem',
-                              marginTop: '0.25rem',
-                              fontWeight: '600',
-                            }}>
-                              ⚠️ 同じユーザーのため減点（0.5倍）
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
+                .map((idea, index) => (
+                  <IdeaCard
+                    key={idea.id}
+                    idea={idea}
+                    index={index}
+                    allIdeas={allIdeas}
+                    clusters={clusters}
+                    currentUserId={currentUserId}
+                    onHoverIdea={onHoverIdea}
+                    showUserInfo={false}
+                  />
+                ))}
+            </div>
+          )
+        ) : (
+          // All Ideas view
+          allIdeas.length === 0 ? (
+            <div style={{
+              textAlign: 'center',
+              color: '#666',
+              padding: '2rem',
+            }}>
+              まだアイディアがありません
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              {allIdeas
+                .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+                .map((idea, index) => (
+                  <IdeaCard
+                    key={idea.id}
+                    idea={idea}
+                    index={index}
+                    allIdeas={allIdeas}
+                    clusters={clusters}
+                    currentUserId={currentUserId}
+                    onHoverIdea={onHoverIdea}
+                    showUserInfo={true}
+                  />
+                ))}
             </div>
           )
         )}

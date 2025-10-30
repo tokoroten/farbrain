@@ -11,6 +11,7 @@ interface Props {
   selectedIdea: IdeaVisualization | null;
   onSelectIdea: (idea: IdeaVisualization | null) => void;
   hoveredIdeaId?: string | null;
+  hoveredUserId?: string | null;
   currentUserId?: string;
 }
 
@@ -28,7 +29,7 @@ const getUserColor = (userId: string): string => {
 
 export const getUserColorFromId = getUserColor; // Export for use in Scoreboard
 
-export const VisualizationCanvas = ({ ideas, clusters, selectedIdea, onSelectIdea, hoveredIdeaId, currentUserId }: Props) => {
+export const VisualizationCanvas = ({ ideas, clusters, selectedIdea, onSelectIdea, hoveredIdeaId, hoveredUserId, currentUserId }: Props) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
@@ -244,6 +245,34 @@ export const VisualizationCanvas = ({ ideas, clusters, selectedIdea, onSelectIde
       ctx.fillText(cluster.label, centerX, centerY);
     });
 
+    // Draw lines connecting ideas to their closest ideas (only when hovering)
+    if (hoveredIdeaId) {
+      ideas.forEach((idea) => {
+        if (!idea.closest_idea_id) return;
+
+        const closestIdea = ideas.find(i => i.id === idea.closest_idea_id);
+        if (!closestIdea) return;
+
+        // Only draw line if hovering over this idea or its closest idea
+        const isHovered = hoveredIdeaId === idea.id || hoveredIdeaId === closestIdea.id;
+        if (!isHovered) return;
+
+        const x1 = toScreenX(idea.x);
+        const y1 = toScreenY(idea.y);
+        const x2 = toScreenX(closestIdea.x);
+        const y2 = toScreenY(closestIdea.y);
+
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+
+        // Highlighted line
+        ctx.strokeStyle = 'rgba(102, 126, 234, 0.8)';
+        ctx.lineWidth = 3;
+        ctx.stroke();
+      });
+    }
+
     // Draw ideas
     ideas.forEach((idea) => {
       const x = toScreenX(idea.x);
@@ -253,7 +282,8 @@ export const VisualizationCanvas = ({ ideas, clusters, selectedIdea, onSelectIde
       const isMyLatest = myLatestIdeaId === idea.id;
       const isOthersRecent = othersRecentIdeaIds.includes(idea.id);
       const isHovered = hoveredIdeaId === idea.id;
-      const isDimmed = hoveredIdeaId && !isHovered;
+      const isUserHovered = hoveredUserId ? idea.user_id === hoveredUserId : false;
+      const isDimmed = (hoveredIdeaId && !isHovered) || (hoveredUserId && !isUserHovered);
 
       // Set global alpha for dimming effect
       if (isDimmed) {
@@ -361,7 +391,7 @@ export const VisualizationCanvas = ({ ideas, clusters, selectedIdea, onSelectIde
     // Reset global alpha
     ctx.globalAlpha = 1.0;
 
-  }, [ideas, clusters, dimensions, transform, selectedIdea, myLatestIdeaId, othersRecentIdeaIds, pulseAnimation, hoveredIdeaId]);
+  }, [ideas, clusters, dimensions, transform, selectedIdea, myLatestIdeaId, othersRecentIdeaIds, pulseAnimation, hoveredIdeaId, hoveredUserId]);
 
   // Mouse handlers
   const handleMouseDown = (e: React.MouseEvent) => {
@@ -604,28 +634,62 @@ export const VisualizationCanvas = ({ ideas, clusters, selectedIdea, onSelectIde
           position: 'fixed',
           left: `${tooltipPosition.x + 15}px`,
           top: `${tooltipPosition.y + 15}px`,
-          background: 'rgba(0, 0, 0, 0.9)',
+          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
           color: 'white',
-          padding: '0.75rem',
-          borderRadius: '0.5rem',
+          padding: '1rem',
+          borderRadius: '0.75rem',
           fontSize: '0.875rem',
-          maxWidth: '300px',
+          maxWidth: '320px',
           pointerEvents: 'none',
           zIndex: 1000,
-          boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
+          boxShadow: '0 10px 25px rgba(0,0,0,0.2), 0 6px 12px rgba(0,0,0,0.15)',
+          border: '1px solid rgba(255,255,255,0.2)',
         }}>
-          <div style={{ fontWeight: 'bold', marginBottom: '0.25rem' }}>
+          <div style={{ fontWeight: 'bold', marginBottom: '0.5rem', fontSize: '1rem' }}>
             {hoveredIdea.user_name}
           </div>
-          <div style={{ fontSize: '0.75rem', color: '#ffd700', marginBottom: '0.25rem' }}>
-            クラスタ: {hoveredIdea.cluster_id !== null ? hoveredIdea.cluster_id : 'なし'}
+          <div style={{ fontSize: '0.75rem', color: '#ffd700', marginBottom: '0.5rem', fontWeight: '600' }}>
+            クラスタ: {hoveredIdea.cluster_id !== null
+              ? clusters.find(c => c.id === hoveredIdea.cluster_id)?.label || `クラスタ ${hoveredIdea.cluster_id}`
+              : 'なし'}
           </div>
-          <div style={{ marginBottom: '0.5rem' }}>
+          <div style={{
+            marginBottom: '0.75rem',
+            padding: '0.5rem',
+            background: 'rgba(255,255,255,0.1)',
+            borderRadius: '0.5rem',
+            lineHeight: '1.5',
+          }}>
             {hoveredIdea.formatted_text}
           </div>
-          <div style={{ fontSize: '0.75rem', color: '#aaa' }}>
-            新規性スコア: {hoveredIdea.novelty_score.toFixed(1)}
+          <div style={{ fontSize: '0.75rem', color: '#e0e0e0', marginBottom: '0.25rem' }}>
+            新規性スコア: <span style={{ fontWeight: 'bold', color: '#ffd700' }}>{hoveredIdea.novelty_score.toFixed(1)}</span>
           </div>
+          {hoveredIdea.closest_idea_id && (
+            <div style={{
+              fontSize: '0.75rem',
+              color: '#e0e0e0',
+              marginTop: '0.5rem',
+              paddingTop: '0.5rem',
+              borderTop: '1px solid rgba(255,255,255,0.2)',
+            }}>
+              投稿時に最も近かったアイディア:
+              <span style={{
+                display: 'block',
+                marginTop: '0.25rem',
+                fontWeight: '600',
+                color: '#ffd700',
+              }}>
+                {(() => {
+                  const closestIdea = ideas.find(i => i.id === hoveredIdea.closest_idea_id);
+                  if (closestIdea) {
+                    return `${closestIdea.user_name}: ${closestIdea.formatted_text.substring(0, 50)}${closestIdea.formatted_text.length > 50 ? '...' : ''}`;
+                  }
+                  return hoveredIdea.closest_idea_id;
+                })()}
+              </span>
+            </div>
+          )}
         </div>
       )}
 

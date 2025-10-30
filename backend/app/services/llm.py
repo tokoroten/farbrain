@@ -14,6 +14,21 @@ from backend.app.core.config import settings
 logger = logging.getLogger(__name__)
 
 
+# Default prompts
+DEFAULT_FORMATTING_SYSTEM_PROMPT = """あなたはブレインストーミングセッションのファシリテーターです。
+参加者の生のアイデアを、簡潔で具体的な形に整形するのがあなたの役割です。
+
+整形の原則:
+- 核心となるアイデアを明確に抽出する
+- 具体的で実現可能な表現にする
+- 感情的な表現を客観的に言い換える
+- 1-2文で簡潔にまとめる
+- 整形後のテキストのみを出力する(説明や前置きは不要)"""
+
+DEFAULT_SUMMARIZATION_PROMPT = """以下のアイディアに共通するテーマを1-3語で要約してください。
+共通テーマ（1-3語のみ、説明不要）:"""
+
+
 class OpenAIProvider:
     """OpenAI GPT provider."""
 
@@ -231,16 +246,8 @@ class LLMService:
             # Custom prompt might use {raw_text} placeholder
             prompt = custom_prompt.replace("{raw_text}", raw_text)
         else:
-            # Improved default prompt with better instructions
-            system_prompt = """あなたはブレインストーミングセッションのファシリテーターです。
-参加者の生のアイデアを、簡潔で具体的な形に整形するのがあなたの役割です。
-
-整形の原則:
-- 核心となるアイデアを明確に抽出する
-- 具体的で実現可能な表現にする
-- 感情的な表現を客観的に言い換える
-- 1-2文で簡潔にまとめる
-- 整形後のテキストのみを出力する（説明や前置きは不要）"""
+            # Use default system prompt
+            system_prompt = DEFAULT_FORMATTING_SYSTEM_PROMPT
 
             # Add session context if available
             if session_context:
@@ -350,26 +357,32 @@ class LLMService:
 
         ideas_text = "\n".join(f"- {idea}" for idea in sample_ideas)
 
-        # Default summarization prompt
-        default_prompt = (
-            "以下のアイディアに共通するテーマを1-3語で要約してください。\n"
-            f"アイディア一覧:\n{ideas_text}"
-        )
+        # Use custom prompt if provided, otherwise use default
+        prompt_template = custom_prompt if custom_prompt else DEFAULT_SUMMARIZATION_PROMPT
 
-        # Add session context if available
+        # Build the full prompt by adding session context (if available) and ideas list
+        prompt_parts = []
+
+        # Add session context if available and not using custom prompt
         if session_context and not custom_prompt:
-            default_prompt = (
-                f"セッションのテーマ・目的: {session_context}\n\n"
-                "上記のコンテキストを踏まえて、以下のアイディアに共通するテーマを1-3語で要約してください。\n"
-                f"アイディア一覧:\n{ideas_text}"
-            )
+            prompt_parts.append(f"セッションのテーマ・目的: {session_context}")
+            prompt_parts.append("")  # blank line
 
-        prompt_template = custom_prompt or default_prompt
+        # Add the main prompt
+        prompt_parts.append(prompt_template)
+        prompt_parts.append("")  # blank line
 
-        # Replace {ideas} placeholder
-        prompt = prompt_template.replace("{ideas}", ideas_text)
+        # Always append the ideas list at the end
+        prompt_parts.append("アイディア一覧:")
+        prompt_parts.append(ideas_text)
 
-        label = await self.provider.generate(prompt, temperature=0.3)
+        # Combine all parts
+        prompt = "\n".join(prompt_parts)
+
+        # Log the final prompt for debugging
+        logger.info(f"[LLM METHOD] Cluster summarization prompt (first 200 chars): {prompt[:200]}...")
+
+        label = await self.provider.generate(prompt, temperature=0.1)
 
         # Ensure label is concise (fallback)
         if len(label) > 50:

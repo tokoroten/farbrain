@@ -33,11 +33,13 @@ export const BrainstormSession = () => {
   const [error, setError] = useState<string | null>(null);
   const [selectedIdea, setSelectedIdea] = useState<IdeaVisualization | null>(null);
   const [hoveredIdeaId, setHoveredIdeaId] = useState<string | null>(null);
+  const [hoveredUserId, setHoveredUserId] = useState<string | null>(null);
   const [showAdminDialog, setShowAdminDialog] = useState(false);
   const [adminPassword, setAdminPassword] = useState('');
   const [clusteringInProgress, setClusteringInProgress] = useState(false);
   const [clusterMode, setClusterMode] = useState<'auto' | 'fixed'>('auto');
   const [fixedClusterCount, setFixedClusterCount] = useState('');
+  const [menuOpen, setMenuOpen] = useState(false);
 
   // WebSocket connection
   const { isConnected } = useWebSocket({
@@ -189,6 +191,51 @@ export const BrainstormSession = () => {
     setShowAdminDialog(true);
   };
 
+  const handleExportCSV = async () => {
+    if (!sessionId) return;
+
+    try {
+      await api.sessions.export(sessionId);
+    } catch (err) {
+      console.error('Failed to export CSV:', err);
+      setError('CSVのエクスポートに失敗しました');
+    }
+  };
+
+  const handleDownloadReport = async () => {
+    if (!sessionId) return;
+
+    try {
+      await api.reports.downloadMarkdown(sessionId);
+    } catch (err: any) {
+      console.error('Failed to download report:', err);
+
+      // Check if it's a 409 Conflict (already generating)
+      if (err.response?.status === 409) {
+        alert('レポートを現在作成中です。\n\n他のユーザーがレポートを生成しています。\n完了するまで少々お待ちください。');
+      } else {
+        setError('レポートのダウンロードに失敗しました');
+      }
+    }
+  };
+
+  const handleDownloadPDFReport = async () => {
+    if (!sessionId) return;
+
+    try {
+      await api.reports.downloadPDF(sessionId);
+    } catch (err: any) {
+      console.error('Failed to download PDF report:', err);
+
+      // Check if it's a 409 Conflict (already generating)
+      if (err.response?.status === 409) {
+        alert('レポートを現在作成中です。\n\n他のユーザーがレポートを生成しています。\n完了するまで少々お待ちください。');
+      } else {
+        setError('PDFレポートのダウンロードに失敗しました');
+      }
+    }
+  };
+
   const handleAdminSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -215,9 +262,15 @@ export const BrainstormSession = () => {
       setError(null);
       alert('クラスタリングが完了しました');
       await fetchSessionData();
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to recalculate clustering:', err);
-      setError('クラスタリングの再計算に失敗しました');
+
+      // Check if it's a 409 Conflict error (clustering in progress)
+      if (err.response?.status === 409) {
+        setError(err.response.data.detail || 'クラスタリングが実行中です。完了するまでお待ちください。');
+      } else {
+        setError('クラスタリングの再計算に失敗しました');
+      }
     } finally {
       setClusteringInProgress(false);
     }
@@ -288,36 +341,185 @@ export const BrainstormSession = () => {
             </span>
           </div>
         </div>
-        <div style={{ display: 'flex', gap: '0.5rem' }}>
-          {ideas.length >= 10 && (
-            <button
-              onClick={handleRecalculateClick}
-              disabled={clusteringInProgress}
-              style={{
-                padding: '0.5rem 1rem',
-                background: clusteringInProgress ? '#ccc' : '#667eea',
-                color: 'white',
-                border: 'none',
-                borderRadius: '0.5rem',
-                cursor: clusteringInProgress ? 'not-allowed' : 'pointer',
-                fontWeight: '600',
-              }}
-            >
-              {clusteringInProgress ? '再計算中...' : '🔄 クラスタ再計算（管理者）'}
-            </button>
-          )}
+        <div style={{ position: 'relative' }}>
           <button
-            onClick={() => navigate('/sessions')}
+            onClick={() => setMenuOpen(!menuOpen)}
             style={{
               padding: '0.5rem 1rem',
-              background: '#f0f0f0',
-              border: 'none',
+              background: '#f8f9fa',
+              color: '#333',
+              border: '1px solid #ddd',
               borderRadius: '0.5rem',
               cursor: 'pointer',
+              fontSize: '1rem',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              fontWeight: '500',
             }}
           >
-            セッション一覧
+            ☰ メニュー
           </button>
+          {menuOpen && (
+            <>
+              <div
+                style={{
+                  position: 'fixed',
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  zIndex: 999,
+                }}
+                onClick={() => setMenuOpen(false)}
+              />
+              <div
+                style={{
+                  position: 'absolute',
+                  top: '100%',
+                  right: 0,
+                  marginTop: '0.5rem',
+                  background: 'white',
+                  border: '1px solid #ddd',
+                  borderRadius: '0.5rem',
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                  minWidth: '200px',
+                  zIndex: 1000,
+                  overflow: 'hidden',
+                }}
+              >
+                {ideas.length >= 10 && (
+                  <button
+                    onClick={() => {
+                      handleRecalculateClick();
+                      setMenuOpen(false);
+                    }}
+                    disabled={clusteringInProgress}
+                    style={{
+                      width: '100%',
+                      padding: '0.75rem 1rem',
+                      background: 'white',
+                      color: clusteringInProgress ? '#999' : '#333',
+                      border: 'none',
+                      borderBottom: '1px solid #eee',
+                      cursor: clusteringInProgress ? 'not-allowed' : 'pointer',
+                      textAlign: 'left',
+                      fontWeight: '500',
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!clusteringInProgress) {
+                        e.currentTarget.style.background = '#f5f5f5';
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = 'white';
+                    }}
+                  >
+                    {clusteringInProgress ? '再計算中...' : '🔄 クラスタ再計算'}
+                  </button>
+                )}
+                <button
+                  onClick={() => {
+                    handleExportCSV();
+                    setMenuOpen(false);
+                  }}
+                  style={{
+                    width: '100%',
+                    padding: '0.75rem 1rem',
+                    background: 'white',
+                    color: '#333',
+                    border: 'none',
+                    borderBottom: '1px solid #eee',
+                    cursor: 'pointer',
+                    textAlign: 'left',
+                    fontWeight: '500',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = '#f5f5f5';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = 'white';
+                  }}
+                >
+                  📥 CSV出力
+                </button>
+                <button
+                  onClick={() => {
+                    handleDownloadReport();
+                    setMenuOpen(false);
+                  }}
+                  style={{
+                    width: '100%',
+                    padding: '0.75rem 1rem',
+                    background: 'white',
+                    color: '#333',
+                    border: 'none',
+                    borderBottom: '1px solid #eee',
+                    cursor: 'pointer',
+                    textAlign: 'left',
+                    fontWeight: '500',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = '#f5f5f5';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = 'white';
+                  }}
+                >
+                  📄 レポート(MD)
+                </button>
+                <button
+                  onClick={() => {
+                    handleDownloadPDFReport();
+                    setMenuOpen(false);
+                  }}
+                  style={{
+                    width: '100%',
+                    padding: '0.75rem 1rem',
+                    background: 'white',
+                    color: '#333',
+                    border: 'none',
+                    borderBottom: '1px solid #eee',
+                    cursor: 'pointer',
+                    textAlign: 'left',
+                    fontWeight: '500',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = '#f5f5f5';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = 'white';
+                  }}
+                >
+                  📑 レポート(PDF)
+                </button>
+                <button
+                  onClick={() => {
+                    navigate('/sessions');
+                    setMenuOpen(false);
+                  }}
+                  style={{
+                    width: '100%',
+                    padding: '0.75rem 1rem',
+                    background: 'white',
+                    color: '#333',
+                    border: 'none',
+                    cursor: 'pointer',
+                    textAlign: 'left',
+                    fontWeight: '500',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = '#f5f5f5';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = 'white';
+                  }}
+                >
+                  📋 セッション一覧に戻る
+                </button>
+              </div>
+            </>
+          )}
         </div>
       </div>
 
@@ -352,6 +554,7 @@ export const BrainstormSession = () => {
               selectedIdea={selectedIdea}
               onSelectIdea={setSelectedIdea}
               hoveredIdeaId={hoveredIdeaId}
+              hoveredUserId={hoveredUserId}
               currentUserId={userId || undefined}
             />
           </div>
@@ -396,7 +599,9 @@ export const BrainstormSession = () => {
             currentUserId={userId || ''}
             myIdeas={ideas.filter(idea => idea.user_id === userId)}
             allIdeas={ideas}
+            clusters={clusters}
             onHoverIdea={setHoveredIdeaId}
+            onHoverUser={setHoveredUserId}
           />
         </div>
       </div>
@@ -474,7 +679,7 @@ export const BrainstormSession = () => {
               </p>
             </div>
 
-            <div>
+            <div style={{ marginBottom: '1rem' }}>
               <h3 style={{ fontSize: '0.875rem', color: '#666', marginBottom: '0.5rem' }}>
                 元のテキスト
               </h3>
@@ -482,6 +687,51 @@ export const BrainstormSession = () => {
                 {selectedIdea.raw_text}
               </p>
             </div>
+
+            <div style={{ marginBottom: '1rem' }}>
+              <h3 style={{ fontSize: '0.875rem', color: '#666', marginBottom: '0.5rem' }}>
+                クラスタ
+              </h3>
+              <p style={{ color: '#333', fontSize: '0.95rem' }}>
+                {selectedIdea.cluster_id !== null
+                  ? clusters.find(c => c.id === selectedIdea.cluster_id)?.label || `クラスタ ${selectedIdea.cluster_id}`
+                  : 'クラスタ未割当'}
+              </p>
+            </div>
+
+            {selectedIdea.closest_idea_id && (() => {
+              const closestIdea = ideas.find(i => i.id === selectedIdea.closest_idea_id);
+              return closestIdea ? (
+                <div>
+                  <h3 style={{ fontSize: '0.875rem', color: '#666', marginBottom: '0.5rem' }}>
+                    💡 投稿時に最も近かったアイディア
+                  </h3>
+                  <div style={{
+                    padding: '0.75rem',
+                    background: '#f0f7ff',
+                    borderLeft: '3px solid #667eea',
+                    borderRadius: '0.25rem',
+                  }}>
+                    <p style={{ color: '#333', fontSize: '0.95rem', marginBottom: '0.5rem' }}>
+                      {closestIdea.formatted_text}
+                    </p>
+                    <div style={{ fontSize: '0.8rem', color: '#999' }}>
+                      投稿者: {closestIdea.user_name}
+                    </div>
+                    {closestIdea.user_id === selectedIdea.user_id && (
+                      <div style={{
+                        color: '#ff6b6b',
+                        fontSize: '0.75rem',
+                        marginTop: '0.25rem',
+                        fontWeight: '600',
+                      }}>
+                        ⚠️ 同じユーザーのため減点（0.5倍）
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : null;
+            })()}
           </div>
         </div>
       )}

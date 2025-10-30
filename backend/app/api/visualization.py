@@ -121,9 +121,16 @@ async def get_scoreboard(
     )
     users = users_result.scalars().all()
 
-    # Build scoreboard entries
+    # Build scoreboard entries (only include users with at least 1 idea)
     scoreboard_entries = []
-    for rank, user in enumerate(users, start=1):
+    rank = 0
+    for user in users:
+        # Skip users with no ideas
+        if user.idea_count == 0:
+            continue
+
+        rank += 1
+
         # Get user's top idea
         top_idea_result = await db.execute(
             select(Idea)
@@ -145,7 +152,7 @@ async def get_scoreboard(
             }
 
         # Calculate average novelty score
-        avg_novelty_score = user.total_score / user.idea_count if user.idea_count > 0 else 0.0
+        avg_novelty_score = user.total_score / user.idea_count
 
         scoreboard_entries.append(
             ScoreboardEntry(

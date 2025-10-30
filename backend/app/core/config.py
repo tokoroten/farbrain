@@ -64,11 +64,11 @@ class Settings(BaseSettings):
     )
     clustering_interval: int = Field(
         default=10,
-        description="Update cluster labels every N ideas (label-only update)"
+        description="Full re-clustering (UMAP + k-means + LLM labels) every N ideas"
     )
     reclustering_interval: int = Field(
-        default=50,
-        description="Full re-clustering (UMAP re-fit) every N ideas"
+        default=10,
+        description="Full re-clustering interval (same as clustering_interval for consistency)"
     )
     max_clusters: int = Field(
         default=20,

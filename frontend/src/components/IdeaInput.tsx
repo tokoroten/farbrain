@@ -2,7 +2,7 @@
  * Idea input component with dialogue mode
  */
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 
 interface Props {
   onSubmit: (text: string, skipFormatting?: boolean) => Promise<void>;
@@ -18,6 +18,7 @@ export const IdeaInput = ({ onSubmit, sessionId }: Props) => {
   const [conversationHistory, setConversationHistory] = useState<Array<{ role: string; content: string }>>([]);
   const [aiResponse, setAiResponse] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const handleDialogueContinue = async () => {
     if (!text.trim()) {
@@ -153,18 +154,23 @@ export const IdeaInput = ({ onSubmit, sessionId }: Props) => {
       // In dialogue mode, continue conversation
       await handleDialogueContinue();
     } else {
-      // Direct submission
-      setIsSubmitting(true);
+      // Direct submission - optimistic UI
+      const ideaText = text.trim();
+      const currentSkipFormatting = skipFormatting;
 
-      try {
-        await onSubmit(text.trim(), skipFormatting);
-        setText('');
-      } catch (err) {
+      // Clear input immediately and return focus
+      setText('');
+      setTimeout(() => {
+        textareaRef.current?.focus();
+      }, 0);
+
+      // Submit in background (fire-and-forget with error handling)
+      onSubmit(ideaText, currentSkipFormatting).catch((err) => {
         console.error('Failed to submit idea:', err);
-        setError('アイディアの送信に失敗しました');
-      } finally {
-        setIsSubmitting(false);
-      }
+        setError('アイディアの送信に失敗しました。もう一度お試しください。');
+        // Restore text on error
+        setText(ideaText);
+      });
     }
   };
 
@@ -264,6 +270,7 @@ export const IdeaInput = ({ onSubmit, sessionId }: Props) => {
           💡 {dialogueMode ? 'AIと対話しながらアイディアを深める' : '新しいアイディアを投稿'}
         </label>
         <textarea
+          ref={textareaRef}
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => {
@@ -276,7 +283,6 @@ export const IdeaInput = ({ onSubmit, sessionId }: Props) => {
           placeholder="あなたのアイディアを入力してください..."
           rows={3}
           maxLength={2000}
-          disabled={isSubmitting}
           style={{
             width: '100%',
             padding: '0.75rem',
@@ -402,7 +408,7 @@ export const IdeaInput = ({ onSubmit, sessionId }: Props) => {
       ) : (
         <button
           type="submit"
-          disabled={isSubmitting || !text.trim()}
+          disabled={!text.trim()}
           style={{
             width: '100%',
             padding: '0.75rem',
@@ -412,12 +418,12 @@ export const IdeaInput = ({ onSubmit, sessionId }: Props) => {
             borderRadius: '0.5rem',
             fontSize: '1rem',
             fontWeight: '600',
-            cursor: isSubmitting || !text.trim() ? 'not-allowed' : 'pointer',
-            opacity: isSubmitting || !text.trim() ? 0.6 : 1,
+            cursor: !text.trim() ? 'not-allowed' : 'pointer',
+            opacity: !text.trim() ? 0.6 : 1,
             transition: 'opacity 0.2s',
           }}
         >
-          {isSubmitting ? '送信中...' : '投稿する'}
+          投稿する
         </button>
       )}
     </form>

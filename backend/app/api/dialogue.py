@@ -55,6 +55,12 @@ async def deepen_idea(
         )
         session = session_result.scalar_one_or_none()
         if session:
+            # Check if session is accepting new ideas
+            if not session.accepting_ideas:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="このセッションは停止されているため、新しいアイデアを投稿できません"
+                )
             session_context = session.description
 
     llm_service = get_llm_service()
@@ -113,6 +119,12 @@ async def finalize_idea(
         )
         session = session_result.scalar_one_or_none()
         if session:
+            # Check if session is accepting new ideas
+            if not session.accepting_ideas:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="このセッションは停止されているため、新しいアイデアを投稿できません"
+                )
             session_context = session.description
 
     llm_service = get_llm_service()

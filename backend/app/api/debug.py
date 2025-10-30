@@ -32,6 +32,9 @@ from backend.app.websocket.manager import manager
 router = APIRouter(prefix="/debug", tags=["debug"])
 logger = logging.getLogger(__name__)
 
+# Global lock for clustering operations (per session)
+_clustering_locks: dict[str, bool] = {}
+
 
 class BulkIdeaCreate(BaseModel):
     """Bulk idea creation without LLM formatting."""
@@ -432,175 +435,192 @@ async def force_cluster(
     # Log received parameters
     logger.info(f"[FORCE-CLUSTER] Received request: session_id={data.session_id}, use_llm_labels={data.use_llm_labels}, fixed_cluster_count={data.fixed_cluster_count}")
 
-    # Verify session
-    session_result = await db.execute(
-        select(Session).where(Session.id == data.session_id)
-    )
-    session = session_result.scalar_one_or_none()
-
-    if not session:
+    # Check if clustering is already in progress for this session
+    if _clustering_locks.get(data.session_id, False):
+        logger.warning(f"[FORCE-CLUSTER] Clustering already in progress for session {data.session_id}")
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Session not found"
+            status_code=status.HTTP_409_CONFLICT,
+            detail="クラスタリングが実行中です。完了するまでお待ちください。"
         )
 
-    # Update fixed_cluster_count in session if provided
-    if data.fixed_cluster_count is not None:
-        session.fixed_cluster_count = data.fixed_cluster_count
-        await db.commit()
-        await db.refresh(session)
+    # Acquire lock
+    _clustering_locks[data.session_id] = True
+    logger.info(f"[FORCE-CLUSTER] Acquired clustering lock for session {data.session_id}")
 
-    # Get all ideas
-    ideas_result = await db.execute(
-        select(Idea).where(Idea.session_id == data.session_id)
-    )
-    all_ideas = ideas_result.scalars().all()
-
-    if len(all_ideas) < 10:
-        return {
-            "message": "Not enough ideas for clustering (minimum 10)",
-            "idea_count": len(all_ideas),
-            "clustered": False,
-        }
-
-    # Clear cached clustering service to force re-fitting UMAP model
-    clear_clustering_service(data.session_id)
-
-    # Get fresh clustering service for this session with fixed_cluster_count
-    clustering_service = get_clustering_service(
-        data.session_id,
-        fixed_cluster_count=session.fixed_cluster_count
-    )
-
-    # Get all embeddings
-    all_embeddings_array = np.array([np.array(idea.embedding) for idea in all_ideas])
-
-    # Perform clustering (this will fit a new UMAP model)
-    clustering_result = clustering_service.fit_transform(all_embeddings_array)
-
-    # Update coordinates and cluster assignments
-    for i, idea in enumerate(all_ideas):
-        idea.x = float(clustering_result.coordinates[i, 0])
-        idea.y = float(clustering_result.coordinates[i, 1])
-        idea.cluster_id = int(clustering_result.cluster_labels[i])
-
-    await db.commit()
-
-    # Create/update clusters with simple labels
-    cluster_ideas: dict[int, list[Idea]] = {}
-    for idea in all_ideas:
-        if idea.cluster_id is not None:
-            if idea.cluster_id not in cluster_ideas:
-                cluster_ideas[idea.cluster_id] = []
-            cluster_ideas[idea.cluster_id].append(idea)
-
-    # Initialize LLM service if needed
-    llm_service = None
-    if data.use_llm_labels:
-        try:
-            llm_service = get_llm_service()
-            logger.info(f"[FORCE-CLUSTER] LLM service initialized successfully")
-        except Exception as e:
-            logger.error(f"[FORCE-CLUSTER] Failed to initialize LLM service: {e}")
-            llm_service = None
-
-    # Generate labels in parallel if using LLM
-    async def generate_label_for_cluster(cluster_id: int, cluster_idea_list: list[Idea]) -> tuple[int, str, list[Idea]]:
-        """Generate label for a single cluster (can run in parallel)."""
-        # Sample ideas
-        sample_size = min(10, len(cluster_idea_list))
-        sampled_ideas = np.random.choice(cluster_idea_list, sample_size, replace=False).tolist()
-
-        # Generate label
-        if data.use_llm_labels and llm_service:
-            # Use LLM to generate cluster label
-            logger.info(f"[FORCE-CLUSTER] Generating LLM label for cluster {cluster_id}")
-            sample_texts = [idea.formatted_text for idea in sampled_ideas]
-            label = await llm_service.summarize_cluster(
-                sample_texts,
-                custom_prompt=session.summarization_prompt,
-                session_context=session.description
-            )
-            logger.info(f"[FORCE-CLUSTER] Generated LLM label for cluster {cluster_id}: {label}")
-        else:
-            # Simple label without LLM
-            label = f"クラスタ {cluster_id + 1}"
-            logger.info(f"[FORCE-CLUSTER] Using simple label for cluster {cluster_id}")
-
-        return cluster_id, label, sampled_ideas
-
-    # Generate all labels in parallel
-    label_tasks = [
-        generate_label_for_cluster(cluster_id, cluster_idea_list)
-        for cluster_id, cluster_idea_list in cluster_ideas.items()
-    ]
-    label_results = await asyncio.gather(*label_tasks)
-
-    # Create/update clusters with generated labels
-    for cluster_id, label, sampled_ideas in label_results:
-        cluster_idea_list = cluster_ideas[cluster_id]
-
-        # Calculate convex hull
-        cluster_coords = np.array([[idea.x, idea.y] for idea in cluster_idea_list])
-        convex_hull_points = clustering_service.compute_convex_hull(cluster_coords)
-
-        # Calculate average novelty
-        avg_novelty = (
-            sum(idea.novelty_score for idea in cluster_idea_list)
-            / len(cluster_idea_list)
+    try:
+        # Verify session
+        session_result = await db.execute(
+            select(Session).where(Session.id == data.session_id)
         )
+        session = session_result.scalar_one_or_none()
 
-        # Create or update cluster
-        cluster_result = await db.execute(
-            select(Cluster).where(
-                Cluster.session_id == data.session_id, Cluster.id == cluster_id
+        if not session:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Session not found"
             )
+
+        # Update fixed_cluster_count in session if provided
+        if data.fixed_cluster_count is not None:
+            session.fixed_cluster_count = data.fixed_cluster_count
+            await db.commit()
+            await db.refresh(session)
+
+        # Get all ideas
+        ideas_result = await db.execute(
+            select(Idea).where(Idea.session_id == data.session_id)
         )
-        cluster = cluster_result.scalar_one_or_none()
+        all_ideas = ideas_result.scalars().all()
 
-        if cluster:
-            cluster.label = label
-            cluster.convex_hull_points = convex_hull_points
-            cluster.sample_idea_ids = [str(idea.id) for idea in sampled_ideas]
-            cluster.idea_count = len(cluster_idea_list)
-            cluster.avg_novelty_score = avg_novelty
-        else:
-            cluster = Cluster(
-                id=cluster_id,
-                session_id=data.session_id,
-                label=label,
-                convex_hull_points=convex_hull_points,
-                sample_idea_ids=[str(idea.id) for idea in sampled_ideas],
-                idea_count=len(cluster_idea_list),
-                avg_novelty_score=avg_novelty,
-            )
-            db.add(cluster)
-
-    await db.commit()
-
-    # Get updated cluster labels from database
-    clusters_result = await db.execute(
-        select(Cluster).where(Cluster.session_id == data.session_id)
-    )
-    clusters = clusters_result.scalars().all()
-    cluster_labels = {cluster.id: cluster.label for cluster in clusters}
-
-    # Broadcast cluster recalculation to all connected clients
-    logger.info(f"[FORCE-CLUSTER] Broadcasting cluster recalculation event to session {data.session_id}")
-    await manager.send_clusters_recalculated(data.session_id)
-
-    return {
-        "message": "Clustering completed",
-        "idea_count": len(all_ideas),
-        "cluster_count": len(cluster_ideas),
-        "clustered": True,
-        "clusters": {
-            cluster_id: {
-                "label": cluster_labels.get(cluster_id, f"クラスタ {cluster_id + 1}"),
-                "idea_count": len(ideas),
+        if len(all_ideas) < 10:
+            return {
+                "message": "Not enough ideas for clustering (minimum 10)",
+                "idea_count": len(all_ideas),
+                "clustered": False,
             }
-            for cluster_id, ideas in cluster_ideas.items()
-        },
-    }
+
+        # Clear cached clustering service to force re-fitting UMAP model
+        clear_clustering_service(data.session_id)
+
+        # Get fresh clustering service for this session with fixed_cluster_count
+        clustering_service = get_clustering_service(
+            data.session_id,
+            fixed_cluster_count=session.fixed_cluster_count
+        )
+
+        # Get all embeddings
+        all_embeddings_array = np.array([np.array(idea.embedding) for idea in all_ideas])
+
+        # Perform clustering (this will fit a new UMAP model)
+        clustering_result = clustering_service.fit_transform(all_embeddings_array)
+
+        # Update coordinates and cluster assignments
+        for i, idea in enumerate(all_ideas):
+            idea.x = float(clustering_result.coordinates[i, 0])
+            idea.y = float(clustering_result.coordinates[i, 1])
+            idea.cluster_id = int(clustering_result.cluster_labels[i])
+
+        await db.commit()
+
+        # Create/update clusters with simple labels
+        cluster_ideas: dict[int, list[Idea]] = {}
+        for idea in all_ideas:
+            if idea.cluster_id is not None:
+                if idea.cluster_id not in cluster_ideas:
+                    cluster_ideas[idea.cluster_id] = []
+                cluster_ideas[idea.cluster_id].append(idea)
+
+        # Initialize LLM service if needed
+        llm_service = None
+        if data.use_llm_labels:
+            try:
+                llm_service = get_llm_service()
+                logger.info(f"[FORCE-CLUSTER] LLM service initialized successfully")
+            except Exception as e:
+                logger.error(f"[FORCE-CLUSTER] Failed to initialize LLM service: {e}")
+                llm_service = None
+
+        # Generate labels in parallel if using LLM
+        async def generate_label_for_cluster(cluster_id: int, cluster_idea_list: list[Idea]) -> tuple[int, str, list[Idea]]:
+            """Generate label for a single cluster (can run in parallel)."""
+            # Sample ideas
+            sample_size = min(10, len(cluster_idea_list))
+            sampled_ideas = np.random.choice(cluster_idea_list, sample_size, replace=False).tolist()
+
+            # Generate label
+            if data.use_llm_labels and llm_service:
+                # Use LLM to generate cluster label
+                logger.info(f"[FORCE-CLUSTER] Generating LLM label for cluster {cluster_id}")
+                sample_texts = [idea.formatted_text for idea in sampled_ideas]
+                label = await llm_service.summarize_cluster(
+                    sample_texts,
+                    custom_prompt=session.summarization_prompt,
+                    session_context=session.description
+                )
+                logger.info(f"[FORCE-CLUSTER] Generated LLM label for cluster {cluster_id}: {label}")
+            else:
+                # Simple label without LLM
+                label = f"クラスタ {cluster_id + 1}"
+                logger.info(f"[FORCE-CLUSTER] Using simple label for cluster {cluster_id}")
+
+            return cluster_id, label, sampled_ideas
+
+        # Generate all labels in parallel
+        label_tasks = [
+            generate_label_for_cluster(cluster_id, cluster_idea_list)
+            for cluster_id, cluster_idea_list in cluster_ideas.items()
+        ]
+        label_results = await asyncio.gather(*label_tasks)
+
+        # Create/update clusters with generated labels
+        for cluster_id, label, sampled_ideas in label_results:
+            cluster_idea_list = cluster_ideas[cluster_id]
+
+            # Calculate convex hull
+            cluster_coords = np.array([[idea.x, idea.y] for idea in cluster_idea_list])
+            convex_hull_points = clustering_service.compute_convex_hull(cluster_coords)
+
+            # Calculate average novelty
+            avg_novelty = (
+                sum(idea.novelty_score for idea in cluster_idea_list)
+                / len(cluster_idea_list)
+            )
+
+            # Create or update cluster
+            cluster_result = await db.execute(
+                select(Cluster).where(
+                    Cluster.session_id == data.session_id, Cluster.id == cluster_id
+                )
+            )
+            cluster = cluster_result.scalar_one_or_none()
+
+            if cluster:
+                cluster.label = label
+                cluster.convex_hull_points = convex_hull_points
+                cluster.sample_idea_ids = [str(idea.id) for idea in sampled_ideas]
+                cluster.idea_count = len(cluster_idea_list)
+                cluster.avg_novelty_score = avg_novelty
+            else:
+                cluster = Cluster(
+                    id=cluster_id,
+                    session_id=data.session_id,
+                    label=label,
+                    convex_hull_points=convex_hull_points,
+                    sample_idea_ids=[str(idea.id) for idea in sampled_ideas],
+                    idea_count=len(cluster_idea_list),
+                    avg_novelty_score=avg_novelty,
+                )
+                db.add(cluster)
+
+        await db.commit()
+
+        # Get updated cluster labels from database
+        clusters_result = await db.execute(
+            select(Cluster).where(Cluster.session_id == data.session_id)
+        )
+        clusters = clusters_result.scalars().all()
+        cluster_labels = {cluster.id: cluster.label for cluster in clusters}
+
+        # Broadcast cluster recalculation to all connected clients
+        logger.info(f"[FORCE-CLUSTER] Broadcasting cluster recalculation event to session {data.session_id}")
+        await manager.send_clusters_recalculated(data.session_id)
+
+        return {
+            "message": "Clustering completed",
+            "idea_count": len(all_ideas),
+            "cluster_count": len(cluster_ideas),
+            "clustered": True,
+            "clusters": {
+                cluster_id: {
+                    "label": cluster_labels.get(cluster_id, f"クラスタ {cluster_id + 1}"),
+                    "idea_count": len(ideas),
+                }
+                for cluster_id, ideas in cluster_ideas.items()
+            },
+        }
+    finally:
+        # Always release the lock
+        _clustering_locks[data.session_id] = False
+        logger.info(f"[FORCE-CLUSTER] Released clustering lock for session {data.session_id}")
 
 
 @router.post("/create-test-session", status_code=status.HTTP_201_CREATED)

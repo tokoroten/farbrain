@@ -22,7 +22,6 @@ export const AdminSessionManagement = () => {
   const [editForm, setEditForm] = useState({
     title: '',
     description: '',
-    duration: 7200,
     password: '',
     formatting_prompt: '',
     summarization_prompt: '',
@@ -117,7 +116,6 @@ export const AdminSessionManagement = () => {
     setEditForm({
       title: session.title,
       description: session.description || '',
-      duration: session.duration,
       password: '', // Don't pre-fill password for security
       formatting_prompt: session.formatting_prompt || '',
       summarization_prompt: session.summarization_prompt || '',
@@ -127,6 +125,36 @@ export const AdminSessionManagement = () => {
   const handleCancelEdit = () => {
     setEditingSession(null);
     setError(null);
+  };
+
+  const handleToggleAcceptingIdeas = async (sessionId: string, currentStatus: boolean) => {
+    try {
+      const newStatus = !currentStatus;
+
+      // Update editingSession state immediately for instant UI feedback
+      if (editingSession && editingSession.id === sessionId) {
+        setEditingSession({
+          ...editingSession,
+          accepting_ideas: newStatus,
+        });
+      }
+
+      await api.sessions.update(sessionId, {
+        accepting_ideas: newStatus,
+      });
+      await fetchSessions();
+    } catch (err) {
+      console.error('Failed to toggle session status:', err);
+      setError('セッションの状態変更に失敗しました');
+
+      // Revert state on error
+      if (editingSession && editingSession.id === sessionId) {
+        setEditingSession({
+          ...editingSession,
+          accepting_ideas: currentStatus,
+        });
+      }
+    }
   };
 
   const handleEditSubmit = async (e: React.FormEvent) => {
@@ -141,7 +169,6 @@ export const AdminSessionManagement = () => {
       const updateData: any = {};
       if (editForm.title.trim()) updateData.title = editForm.title.trim();
       if (editForm.description.trim()) updateData.description = editForm.description.trim();
-      if (editForm.duration) updateData.duration = editForm.duration;
       if (editForm.password.trim()) updateData.password = editForm.password.trim();
       if (editForm.formatting_prompt.trim()) updateData.formatting_prompt = editForm.formatting_prompt.trim();
       if (editForm.summarization_prompt.trim()) updateData.summarization_prompt = editForm.summarization_prompt.trim();
@@ -328,35 +355,56 @@ export const AdminSessionManagement = () => {
           borderRadius: '1rem',
           marginBottom: '1rem',
           display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
           gap: '1rem',
         }}>
+          <div style={{ display: 'flex', gap: '1rem' }}>
+            <button
+              onClick={() => setFilter('active')}
+              style={{
+                padding: '0.5rem 1rem',
+                background: filter === 'active' ? '#667eea' : 'white',
+                color: filter === 'active' ? 'white' : '#333',
+                border: '1px solid #667eea',
+                borderRadius: '0.5rem',
+                cursor: 'pointer',
+                fontWeight: '600',
+              }}
+            >
+              アクティブ
+            </button>
+            <button
+              onClick={() => setFilter('all')}
+              style={{
+                padding: '0.5rem 1rem',
+                background: filter === 'all' ? '#667eea' : 'white',
+                color: filter === 'all' ? 'white' : '#333',
+                border: '1px solid #667eea',
+                borderRadius: '0.5rem',
+                cursor: 'pointer',
+                fontWeight: '600',
+              }}
+            >
+              すべて
+            </button>
+          </div>
           <button
-            onClick={() => setFilter('active')}
+            onClick={() => navigate('/admin')}
             style={{
               padding: '0.5rem 1rem',
-              background: filter === 'active' ? '#667eea' : 'white',
-              color: filter === 'active' ? 'white' : '#333',
-              border: '1px solid #667eea',
+              background: '#28a745',
+              color: 'white',
+              border: 'none',
               borderRadius: '0.5rem',
               cursor: 'pointer',
               fontWeight: '600',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem',
             }}
           >
-            アクティブ
-          </button>
-          <button
-            onClick={() => setFilter('all')}
-            style={{
-              padding: '0.5rem 1rem',
-              background: filter === 'all' ? '#667eea' : 'white',
-              color: filter === 'all' ? 'white' : '#333',
-              border: '1px solid #667eea',
-              borderRadius: '0.5rem',
-              cursor: 'pointer',
-              fontWeight: '600',
-            }}
-          >
-            すべて
+            ➕ 新規セッション作成
           </button>
         </div>
 
@@ -418,10 +466,10 @@ export const AdminSessionManagement = () => {
                           borderRadius: '9999px',
                           fontSize: '0.75rem',
                           fontWeight: '600',
-                          background: session.status === 'active' ? '#d4edda' : '#f8d7da',
-                          color: session.status === 'active' ? '#155724' : '#721c24',
+                          background: session.accepting_ideas ? '#d4edda' : '#f8d7da',
+                          color: session.accepting_ideas ? '#155724' : '#721c24',
                         }}>
-                          {session.status === 'active' ? 'アクティブ' : '終了'}
+                          {session.accepting_ideas ? 'アクティブ' : '停止中'}
                         </span>
                       </div>
 
@@ -643,27 +691,40 @@ export const AdminSessionManagement = () => {
 
                 <div style={{ marginBottom: '1rem' }}>
                   <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '600' }}>
-                    期間（秒）
+                    セッション状態
                   </label>
-                  <input
-                    type="number"
-                    value={editForm.duration}
-                    onChange={(e) => setEditForm({ ...editForm, duration: parseInt(e.target.value) })}
-                    min={60}
-                    max={86400}
-                    required
-                    style={{
-                      width: '100%',
-                      padding: '0.75rem',
-                      border: '2px solid #e0e0e0',
-                      borderRadius: '0.5rem',
-                      fontSize: '1rem',
-                      boxSizing: 'border-box',
-                    }}
-                  />
-                  <div style={{ fontSize: '0.875rem', color: '#666', marginTop: '0.25rem' }}>
-                    {Math.floor(editForm.duration / 60)}分
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '1rem',
+                    padding: '0.75rem',
+                    background: editingSession?.accepting_ideas ? '#d4edda' : '#f8d7da',
+                    borderRadius: '0.5rem',
+                    marginBottom: '0.5rem',
+                  }}>
+                    <span style={{
+                      fontWeight: '600',
+                      color: editingSession?.accepting_ideas ? '#155724' : '#721c24',
+                    }}>
+                      {editingSession?.accepting_ideas ? '✓ アイデア受付中' : '⏸ 停止中'}
+                    </span>
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => editingSession && handleToggleAcceptingIdeas(editingSession.id, editingSession.accepting_ideas)}
+                    style={{
+                      padding: '0.5rem 1rem',
+                      background: editingSession?.accepting_ideas ? '#dc3545' : '#28a745',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '0.5rem',
+                      cursor: 'pointer',
+                      fontWeight: '600',
+                      fontSize: '0.875rem',
+                    }}
+                  >
+                    {editingSession?.accepting_ideas ? '停止する' : '再開する'}
+                  </button>
                 </div>
 
                 <div style={{ marginBottom: '1rem' }}>

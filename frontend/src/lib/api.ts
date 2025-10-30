@@ -184,6 +184,79 @@ export const api = {
       return response.data;
     },
   },
+
+  // Report endpoints
+  reports: {
+    downloadMarkdown: async (sessionId: string): Promise<void> => {
+      const response = await apiClient.get(`/api/reports/${sessionId}/markdown`, {
+        responseType: 'blob',
+      });
+
+      // Create a download link
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+
+      // Extract filename from Content-Disposition header or use default
+      const contentDisposition = response.headers['content-disposition'];
+      let filename = `report_${sessionId}_${new Date().toISOString().split('T')[0]}.md`;
+
+      if (contentDisposition) {
+        // Handle RFC 5987 encoding: filename*=UTF-8''encoded_name
+        const filenameStarMatch = contentDisposition.match(/filename\*=UTF-8''(.+)/);
+        if (filenameStarMatch) {
+          filename = decodeURIComponent(filenameStarMatch[1]);
+        } else {
+          // Fallback to standard filename
+          const filenameMatch = contentDisposition.match(/filename="?(.+)"?/);
+          if (filenameMatch) {
+            filename = filenameMatch[1];
+          }
+        }
+      }
+
+      link.setAttribute('download', filename);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    },
+
+    downloadPDF: async (sessionId: string): Promise<void> => {
+      const response = await apiClient.get(`/api/reports/${sessionId}/pdf`, {
+        responseType: 'blob',
+      });
+
+      // Create a download link
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+
+      // Extract filename from Content-Disposition header or use default
+      const contentDisposition = response.headers['content-disposition'];
+      let filename = `report_${sessionId}_${new Date().toISOString().split('T')[0]}.pdf`;
+
+      if (contentDisposition) {
+        // Handle RFC 5987 encoding: filename*=UTF-8''encoded_name
+        const filenameStarMatch = contentDisposition.match(/filename\*=UTF-8''(.+)/);
+        if (filenameStarMatch) {
+          filename = decodeURIComponent(filenameStarMatch[1]);
+        } else {
+          // Fallback to standard filename
+          const filenameMatch = contentDisposition.match(/filename="?(.+)"?/);
+          if (filenameMatch) {
+            filename = filenameMatch[1];
+          }
+        }
+      }
+
+      link.setAttribute('download', filename);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    },
+  },
 };
 
 export default api;

@@ -6,7 +6,7 @@ import math
 from uuid import UUID
 
 import numpy as np
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -219,6 +219,13 @@ async def create_idea(
         db
     )
 
+    # Check if session is accepting new ideas
+    if not session.accepting_ideas:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="このセッションは停止されているため、新しいアイデアを投稿できません"
+        )
+
     # Step 2: Get existing ideas for scoring and clustering
     existing_ideas_result = await db.execute(
         select(Idea).where(Idea.session_id == str(idea_data.session_id))
@@ -420,20 +427,15 @@ async def create_idea(
         coordinates_recalculated=coordinates_recalculated,
     )
 
-    # Step 6: Trigger re-clustering or label update if needed
+    # Step 6: Trigger full re-clustering every 10 ideas
     new_total = n_existing + 1
     if new_total >= settings.min_ideas_for_clustering:
-        # Full re-clustering every reclustering_interval ideas (e.g., every 50 ideas)
-        if new_total % settings.reclustering_interval == 0:
-            logger.info(f"[IDEA-CREATE] Triggering full re-clustering at {new_total} ideas")
+        # Full re-clustering (UMAP + k-means + LLM labels) every clustering_interval ideas
+        # This includes the initial clustering at idea #10, #20, #30, etc.
+        if new_total % settings.clustering_interval == 0 or new_total == settings.min_ideas_for_clustering:
+            logger.info(f"[IDEA-CREATE] Triggering full re-clustering (UMAP + k-means + LLM labels) at {new_total} ideas")
             asyncio.create_task(
                 full_recluster_session(idea_data.session_id, db)
-            )
-        # Label update only every clustering_interval ideas (e.g., every 10 ideas)
-        elif new_total % settings.clustering_interval == 0:
-            logger.info(f"[IDEA-CREATE] Triggering label update at {new_total} ideas")
-            asyncio.create_task(
-                update_cluster_labels(idea_data.session_id, db)
             )
 
     return IdeaResponse(

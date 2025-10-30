@@ -7,6 +7,7 @@ from backend.app.models.session import Session
 from backend.app.models.user import User
 from backend.app.models.idea import Idea
 from backend.app.models.cluster import Cluster
+from backend.app.models.report import Report
 
 
 async def init_db():

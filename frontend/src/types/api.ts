@@ -34,20 +34,17 @@ export interface Session {
   title: string;
   description: string | null;
   start_time: string;
-  duration: number;
   status: string;
   has_password: boolean;
   accepting_ideas: boolean;
   participant_count: number;
   idea_count: number;
   created_at: string;
-  ended_at: string | null;
 }
 
 export interface SessionCreateRequest {
   title: string;
   description?: string;
-  duration?: number;
   password?: string;
   formatting_prompt?: string;
   summarization_prompt?: string;
@@ -56,8 +53,8 @@ export interface SessionCreateRequest {
 export interface SessionUpdateRequest {
   title?: string;
   description?: string;
-  duration?: number;
   password?: string;
+  accepting_ideas?: boolean;
   formatting_prompt?: string;
   summarization_prompt?: string;
 }
