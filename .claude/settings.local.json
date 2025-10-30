@@ -22,7 +22,12 @@
       "Bash(uv remove:*)",
       "Bash(python -c:*)",
       "Bash(python test_pdf_generation.py:*)",
-      "Bash(taskkill:*)"
+      "Bash(taskkill:*)",
+      "Bash(gh pr list:*)",
+      "Bash(gh pr view:*)",
+      "Bash(gh pr close:*)",
+      "Bash(gh pr merge:*)",
+      "Bash(git pull:*)"
     ],
     "deny": [],
     "ask": []

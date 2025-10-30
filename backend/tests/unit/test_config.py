@@ -132,11 +132,14 @@ class TestSettingsValidation:
         assert settings.umap_min_dist == 1.0
 
     def test_clustering_intervals_logical_consistency(self):
-        """Test clustering_interval must be less than reclustering_interval."""
-        with pytest.raises(ValidationError, match="clustering_interval must be less than reclustering_interval"):
-            Settings(clustering_interval=50, reclustering_interval=50)
+        """Test clustering_interval must be less than or equal to reclustering_interval."""
+        # Equal values are allowed now
+        settings = Settings(clustering_interval=50, reclustering_interval=50)
+        assert settings.clustering_interval == 50
+        assert settings.reclustering_interval == 50
 
-        with pytest.raises(ValidationError, match="clustering_interval must be less than reclustering_interval"):
+        # Greater than should fail
+        with pytest.raises(ValidationError, match="clustering_interval must be less than or equal to reclustering_interval"):
             Settings(clustering_interval=60, reclustering_interval=50)
 
     def test_clustering_intervals_valid(self):

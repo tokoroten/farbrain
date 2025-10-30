@@ -160,9 +160,9 @@ class Settings(BaseSettings):
     @model_validator(mode="after")
     def validate_clustering_intervals(self) -> "Settings":
         """Validate clustering intervals are logically consistent."""
-        if self.clustering_interval >= self.reclustering_interval:
+        if self.clustering_interval > self.reclustering_interval:
             raise ValueError(
-                "clustering_interval must be less than reclustering_interval"
+                "clustering_interval must be less than or equal to reclustering_interval"
             )
         if self.min_ideas_for_clustering > self.clustering_interval:
             raise ValueError(
