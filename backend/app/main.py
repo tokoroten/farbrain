@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from backend.app.api import sessions, users, ideas, visualization, websocket, auth, dialogue, debug, reports
+from backend.app.api import sessions, users, ideas, visualization, websocket, auth, dialogue, debug, reports, votes
 from backend.app.core.config import settings
 from backend.app.core.exception_handlers import register_exception_handlers
 from backend.app.db.base import engine, Base
@@ -14,6 +14,7 @@ from backend.app.models.session import Session as SessionModel
 from backend.app.models.user import User as UserModel
 from backend.app.models.idea import Idea as IdeaModel
 from backend.app.models.cluster import Cluster as ClusterModel
+from backend.app.models.vote import Vote as VoteModel
 
 
 @asynccontextmanager
@@ -78,6 +79,7 @@ app.include_router(dialogue.router)
 app.include_router(websocket.router)
 app.include_router(debug.router, prefix="/api")  # Debug endpoints
 app.include_router(reports.router, prefix="/api")  # Report endpoints
+app.include_router(votes.router)  # Vote endpoints
 
 
 @app.get("/")

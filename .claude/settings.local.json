@@ -27,7 +27,8 @@
       "Bash(gh pr view:*)",
       "Bash(gh pr close:*)",
       "Bash(gh pr merge:*)",
-      "Bash(git pull:*)"
+      "Bash(git pull:*)",
+      "Bash(sqlite3:*)"
     ],
     "deny": [],
     "ask": []

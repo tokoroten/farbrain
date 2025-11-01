@@ -2,8 +2,8 @@
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.db.base import get_db
@@ -11,6 +11,7 @@ from backend.app.models.cluster import Cluster
 from backend.app.models.idea import Idea
 from backend.app.models.session import Session
 from backend.app.models.user import User
+from backend.app.models.vote import Vote
 from backend.app.schemas.visualization import (
     ClusterResponse,
     IdeaVisualization,
@@ -26,6 +27,7 @@ router = APIRouter(prefix="/visualization", tags=["visualization"])
 @router.get("/{session_id}", response_model=VisualizationResponse)
 async def get_visualization(
     session_id: UUID,
+    user_id: UUID = Query(..., description="Current user ID to check vote status"),
     db: AsyncSession = Depends(get_db),
 ) -> VisualizationResponse:
     """Get complete visualization data for a session."""
@@ -53,6 +55,31 @@ async def get_visualization(
     )
     users = {user.user_id: user.name for user in users_result.scalars().all()}
 
+    # Get vote counts for all ideas in this session
+    vote_counts_result = await db.execute(
+        select(Vote.idea_id, func.count(Vote.id).label("vote_count"))
+        .where(Vote.idea_id.in_([idea.id for idea in ideas]))
+        .group_by(Vote.idea_id)
+    )
+    vote_counts = {row[0]: row[1] for row in vote_counts_result.all()}
+
+    # Get current user's internal user ID
+    current_user_result = await db.execute(
+        select(User).where(
+            User.user_id == str(user_id),
+            User.session_id == str(session_id)
+        )
+    )
+    current_user = current_user_result.scalar_one_or_none()
+
+    # Get ideas that current user has voted for
+    user_voted_ideas = set()
+    if current_user:
+        user_votes_result = await db.execute(
+            select(Vote.idea_id).where(Vote.user_id == current_user.id)
+        )
+        user_voted_ideas = {row[0] for row in user_votes_result.all()}
+
     # Build idea visualization data
     idea_visualizations = [
         IdeaVisualization(
@@ -67,6 +94,8 @@ async def get_visualization(
             raw_text=idea.raw_text,
             closest_idea_id=idea.closest_idea_id,
             timestamp=idea.timestamp.isoformat(),
+            vote_count=vote_counts.get(idea.id, 0),
+            user_has_voted=(idea.id in user_voted_ideas),
         )
         for idea in ideas
     ]

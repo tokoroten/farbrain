@@ -11,6 +11,7 @@ from backend.app.db.base import Base
 if TYPE_CHECKING:
     from backend.app.models.session import Session
     from backend.app.models.user import User
+    from backend.app.models.vote import Vote
 
 
 class Idea(Base):
@@ -83,6 +84,9 @@ class Idea(Base):
     # Relationships
     session: Mapped["Session"] = relationship("Session", back_populates="ideas")
     user: Mapped["User"] = relationship("User", back_populates="ideas")
+    votes: Mapped[list["Vote"]] = relationship(
+        "Vote", back_populates="idea", cascade="all, delete-orphan"
+    )
 
     def __repr__(self) -> str:
         return (

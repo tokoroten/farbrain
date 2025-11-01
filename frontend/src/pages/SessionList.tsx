@@ -68,50 +68,51 @@ export const SessionList = () => {
           borderRadius: '1rem',
           marginBottom: '2rem',
         }}>
-          <h1 style={{ fontSize: '2rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>
-            セッション一覧
-          </h1>
+          <div style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginBottom: '0.5rem',
+          }}>
+            <h1 style={{ fontSize: '2rem', fontWeight: 'bold' }}>
+              セッション一覧
+            </h1>
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <button
+                onClick={() => setFilter('active')}
+                style={{
+                  padding: '0.5rem 1rem',
+                  background: filter === 'active' ? '#667eea' : 'white',
+                  color: filter === 'active' ? 'white' : '#333',
+                  border: '1px solid #667eea',
+                  borderRadius: '0.5rem',
+                  cursor: 'pointer',
+                  fontWeight: '600',
+                  fontSize: '0.9rem',
+                }}
+              >
+                アクティブ
+              </button>
+              <button
+                onClick={() => setFilter('all')}
+                style={{
+                  padding: '0.5rem 1rem',
+                  background: filter === 'all' ? '#667eea' : 'white',
+                  color: filter === 'all' ? 'white' : '#333',
+                  border: '1px solid #667eea',
+                  borderRadius: '0.5rem',
+                  cursor: 'pointer',
+                  fontWeight: '600',
+                  fontSize: '0.9rem',
+                }}
+              >
+                すべて
+              </button>
+            </div>
+          </div>
           <p style={{ color: '#666' }}>
             ようこそ、{userName}さん
           </p>
-        </div>
-
-        <div style={{
-          background: 'white',
-          padding: '1rem',
-          borderRadius: '1rem',
-          marginBottom: '1rem',
-          display: 'flex',
-          gap: '1rem',
-        }}>
-          <button
-            onClick={() => setFilter('active')}
-            style={{
-              padding: '0.5rem 1rem',
-              background: filter === 'active' ? '#667eea' : 'white',
-              color: filter === 'active' ? 'white' : '#333',
-              border: '1px solid #667eea',
-              borderRadius: '0.5rem',
-              cursor: 'pointer',
-              fontWeight: '600',
-            }}
-          >
-            アクティブ
-          </button>
-          <button
-            onClick={() => setFilter('all')}
-            style={{
-              padding: '0.5rem 1rem',
-              background: filter === 'all' ? '#667eea' : 'white',
-              color: filter === 'all' ? 'white' : '#333',
-              border: '1px solid #667eea',
-              borderRadius: '0.5rem',
-              cursor: 'pointer',
-              fontWeight: '600',
-            }}
-          >
-            すべて
-          </button>
         </div>
 
         {error && (

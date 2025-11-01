@@ -40,6 +40,8 @@ export const BrainstormSession = () => {
   const [clusterMode, setClusterMode] = useState<'auto' | 'fixed'>('auto');
   const [fixedClusterCount, setFixedClusterCount] = useState('');
   const [menuOpen, setMenuOpen] = useState(false);
+  const [recentlyVotedIdeaIds, setRecentlyVotedIdeaIds] = useState<string[]>([]);
+  const [filteredUserId, setFilteredUserId] = useState<string | null>(null);
 
   // WebSocket connection
   const { isConnected } = useWebSocket({
@@ -76,7 +78,7 @@ export const BrainstormSession = () => {
   }, [userId, userName, sessionId, currentSessionId, navigate]);
 
   const fetchSessionData = async () => {
-    if (!sessionId) return;
+    if (!sessionId || !userId) return;
 
     setIsLoading(true);
     setError(null);
@@ -84,7 +86,7 @@ export const BrainstormSession = () => {
     try {
       const [sessionData, vizData, scoreboardData] = await Promise.all([
         api.sessions.get(sessionId),
-        api.visualization.get(sessionId),
+        api.visualization.get(sessionId, userId),
         api.visualization.getScoreboard(sessionId),
       ]);
 
@@ -101,10 +103,10 @@ export const BrainstormSession = () => {
   };
 
   const fetchVisualizationData = async () => {
-    if (!sessionId) return;
+    if (!sessionId || !userId) return;
 
     try {
-      const vizData = await api.visualization.get(sessionId);
+      const vizData = await api.visualization.get(sessionId, userId);
       setIdeas(vizData.ideas);
       setClusters(vizData.clusters);
       console.log('Visualization data refreshed (ideas and clusters only)');
@@ -174,6 +176,45 @@ export const BrainstormSession = () => {
         // Refresh scoreboard
         fetchScoreboard();
         break;
+
+      case 'vote_added':
+        // Update vote count for the idea
+        setIdeas((prev) =>
+          prev.map((idea) =>
+            idea.id === event.data.idea_id
+              ? {
+                  ...idea,
+                  vote_count: idea.vote_count + 1,
+                  user_has_voted: event.data.user_id === userId ? true : idea.user_has_voted,
+                }
+              : idea
+          )
+        );
+        // Add to recently voted list for pulse animation
+        setRecentlyVotedIdeaIds((prev) => {
+          const newList = [event.data.idea_id, ...prev].slice(0, 5); // Keep only 5 most recent
+          return newList;
+        });
+        // Remove from list after 5 seconds
+        setTimeout(() => {
+          setRecentlyVotedIdeaIds((prev) => prev.filter((id) => id !== event.data.idea_id));
+        }, 5000);
+        break;
+
+      case 'vote_removed':
+        // Update vote count for the idea
+        setIdeas((prev) =>
+          prev.map((idea) =>
+            idea.id === event.data.idea_id
+              ? {
+                  ...idea,
+                  vote_count: Math.max(0, idea.vote_count - 1),
+                  user_has_voted: event.data.user_id === userId ? false : idea.user_has_voted,
+                }
+              : idea
+          )
+        );
+        break;
     }
   }
 
@@ -207,6 +248,32 @@ export const BrainstormSession = () => {
       } else {
         alert('アイディアの削除に失敗しました');
       }
+    }
+  };
+
+  const handleVoteIdea = async (ideaId: string) => {
+    if (!userId) return;
+
+    try {
+      await api.ideas.vote(ideaId, userId);
+      // Vote count will be updated via WebSocket or we can optimistically update
+      await fetchVisualizationData();
+    } catch (err: any) {
+      console.error('Failed to vote idea:', err);
+      alert('投票に失敗しました');
+    }
+  };
+
+  const handleUnvoteIdea = async (ideaId: string) => {
+    if (!userId) return;
+
+    try {
+      await api.ideas.unvote(ideaId, userId);
+      // Vote count will be updated via WebSocket or we can optimistically update
+      await fetchVisualizationData();
+    } catch (err: any) {
+      console.error('Failed to unvote idea:', err);
+      alert('投票の取り消しに失敗しました');
     }
   };
 
@@ -584,6 +651,8 @@ export const BrainstormSession = () => {
               hoveredUserId={hoveredUserId}
               currentUserId={userId || undefined}
               onDeleteIdea={handleDeleteIdea}
+              recentlyVotedIdeaIds={recentlyVotedIdeaIds}
+              filteredUserId={filteredUserId}
             />
           </div>
 
@@ -631,6 +700,9 @@ export const BrainstormSession = () => {
             onHoverIdea={setHoveredIdeaId}
             onHoverUser={setHoveredUserId}
             onDeleteIdea={handleDeleteIdea}
+            onVoteIdea={handleVoteIdea}
+            onUnvoteIdea={handleUnvoteIdea}
+            onUserFilterChange={setFilteredUserId}
           />
         </div>
       </div>

@@ -14,6 +14,8 @@ interface Props {
   hoveredUserId?: string | null;
   currentUserId?: string;
   onDeleteIdea: (ideaId: string, adminPassword?: string) => Promise<void>;
+  recentlyVotedIdeaIds?: string[];
+  filteredUserId?: string | null;
 }
 
 // Generate consistent color for user based on user_id
@@ -30,7 +32,7 @@ const getUserColor = (userId: string): string => {
 
 export const getUserColorFromId = getUserColor; // Export for use in Scoreboard
 
-export const VisualizationCanvas = ({ ideas, clusters, selectedIdea, onSelectIdea, hoveredIdeaId, hoveredUserId, currentUserId, onDeleteIdea }: Props) => {
+export const VisualizationCanvas = ({ ideas, clusters, selectedIdea, onSelectIdea, hoveredIdeaId, hoveredUserId, currentUserId, onDeleteIdea, recentlyVotedIdeaIds = [], filteredUserId }: Props) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
@@ -95,7 +97,9 @@ export const VisualizationCanvas = ({ ideas, clusters, selectedIdea, onSelectIde
 
   // Pulse animation loop
   useEffect(() => {
-    if (!myLatestIdeaId && othersRecentIdeaIds.length === 0) {
+    const hasAnimatingIdeas = myLatestIdeaId || othersRecentIdeaIds.length > 0 || recentlyVotedIdeaIds.length > 0;
+
+    if (!hasAnimatingIdeas) {
       if (animationFrameRef.current) {
         cancelAnimationFrame(animationFrameRef.current);
         animationFrameRef.current = null;
@@ -116,7 +120,7 @@ export const VisualizationCanvas = ({ ideas, clusters, selectedIdea, onSelectIde
         animationFrameRef.current = null;
       }
     };
-  }, [myLatestIdeaId, othersRecentIdeaIds]);
+  }, [myLatestIdeaId, othersRecentIdeaIds, recentlyVotedIdeaIds]);
 
   // Resize handler using ResizeObserver
   useEffect(() => {
@@ -282,13 +286,15 @@ export const VisualizationCanvas = ({ ideas, clusters, selectedIdea, onSelectIde
       const isSelected = selectedIdea?.id === idea.id;
       const isMyLatest = myLatestIdeaId === idea.id;
       const isOthersRecent = othersRecentIdeaIds.includes(idea.id);
+      const isRecentlyVoted = recentlyVotedIdeaIds.includes(idea.id);
       const isHovered = hoveredIdeaId === idea.id;
-      const isUserHovered = hoveredUserId ? idea.user_id === hoveredUserId : false;
-      const isDimmed = (hoveredIdeaId && !isHovered) || (hoveredUserId && !isUserHovered);
+      const isUserHovered = hoveredUserId ? idea.user_id === hoveredUserId : true; // true when no hover
+      const isFilteredUser = filteredUserId ? idea.user_id === filteredUserId : true; // true when no filter
+      const isDimmed = (hoveredIdeaId && !isHovered) || (hoveredUserId && !isUserHovered) || (filteredUserId && !isFilteredUser);
 
       // Set global alpha for dimming effect
       if (isDimmed) {
-        ctx.globalAlpha = 0.2;
+        ctx.globalAlpha = 0.15;  // Even more dimmed when filter is active
       } else {
         ctx.globalAlpha = 1.0;
       }
@@ -349,13 +355,41 @@ export const VisualizationCanvas = ({ ideas, clusters, selectedIdea, onSelectIde
         ctx.fill();
       }
 
+      // Draw pulsing glow effect for recently voted ideas (orange color)
+      if (isRecentlyVoted) {
+        const pulseValue = Math.sin(pulseAnimation) * 0.5 + 0.5; // 0 to 1
+        const glowRadius = radius + 12 + pulseValue * 8;
+
+        // Outer glow - orange
+        const gradient1 = ctx.createRadialGradient(x, y, radius, x, y, glowRadius);
+        gradient1.addColorStop(0, `hsla(30, 90%, 60%, 0.6)`);
+        gradient1.addColorStop(0.5, `hsla(30, 90%, 60%, ${0.35 * pulseValue})`);
+        gradient1.addColorStop(1, `hsla(30, 90%, 60%, 0)`);
+
+        ctx.beginPath();
+        ctx.arc(x, y, glowRadius, 0, Math.PI * 2);
+        ctx.fillStyle = gradient1;
+        ctx.fill();
+
+        // Inner glow - brighter orange
+        const innerGlowRadius = radius + 6 + pulseValue * 4;
+        const gradient2 = ctx.createRadialGradient(x, y, radius, x, y, innerGlowRadius);
+        gradient2.addColorStop(0, `hsla(30, 95%, 70%, 0.8)`);
+        gradient2.addColorStop(1, `hsla(30, 95%, 70%, 0)`);
+
+        ctx.beginPath();
+        ctx.arc(x, y, innerGlowRadius, 0, Math.PI * 2);
+        ctx.fillStyle = gradient2;
+        ctx.fill();
+      }
+
       // Draw circle
       ctx.beginPath();
       ctx.arc(x, y, radius + (isSelected || isHovered ? 3 : 0), 0, Math.PI * 2);
       // Use user-based color instead of score-based color
       const userColor = getUserColor(idea.user_id);
-      // Brighten for latest ideas
-      const lightness = isMyLatest || isOthersRecent ? 70 : 60;
+      // Brighten for latest ideas or recently voted ideas
+      const lightness = isMyLatest || isOthersRecent || isRecentlyVoted ? 70 : 60;
       // Extract hue from user color and apply lightness
       const hueMatch = userColor.match(/hsl\((\d+)/);
       const hue = hueMatch ? hueMatch[1] : '200';
@@ -372,10 +406,10 @@ export const VisualizationCanvas = ({ ideas, clusters, selectedIdea, onSelectIde
         ctx.stroke();
       }
 
-      // Draw border (brighter for latest idea)
+      // Draw border (brighter for latest idea or recently voted)
       if (!isSelected && !isHovered) {
-        ctx.strokeStyle = (isMyLatest || isOthersRecent) ? '#fff' : 'white';
-        ctx.lineWidth = (isMyLatest || isOthersRecent) ? 3 : 2;
+        ctx.strokeStyle = (isMyLatest || isOthersRecent || isRecentlyVoted) ? '#fff' : 'white';
+        ctx.lineWidth = (isMyLatest || isOthersRecent || isRecentlyVoted) ? 3 : 2;
         ctx.stroke();
       }
 
@@ -392,7 +426,7 @@ export const VisualizationCanvas = ({ ideas, clusters, selectedIdea, onSelectIde
     // Reset global alpha
     ctx.globalAlpha = 1.0;
 
-  }, [ideas, clusters, dimensions, transform, selectedIdea, myLatestIdeaId, othersRecentIdeaIds, pulseAnimation, hoveredIdeaId, hoveredUserId]);
+  }, [ideas, clusters, dimensions, transform, selectedIdea, myLatestIdeaId, othersRecentIdeaIds, recentlyVotedIdeaIds, pulseAnimation, hoveredIdeaId, hoveredUserId, filteredUserId]);
 
   // Mouse handlers
   const handleMouseDown = (e: React.MouseEvent) => {

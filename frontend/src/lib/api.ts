@@ -148,12 +148,28 @@ export const api = {
       });
       return response.data;
     },
+
+    vote: async (ideaId: string, userId: string): Promise<{ message: string; vote_id: string }> => {
+      const response = await apiClient.post(`/api/ideas/${ideaId}/vote`, null, {
+        params: { user_id: userId },
+      });
+      return response.data;
+    },
+
+    unvote: async (ideaId: string, userId: string): Promise<{ message: string }> => {
+      const response = await apiClient.delete(`/api/ideas/${ideaId}/vote`, {
+        params: { user_id: userId },
+      });
+      return response.data;
+    },
   },
 
   // Visualization endpoints
   visualization: {
-    get: async (sessionId: string): Promise<VisualizationResponse> => {
-      const response = await apiClient.get(`/api/visualization/${sessionId}`);
+    get: async (sessionId: string, userId: string): Promise<VisualizationResponse> => {
+      const response = await apiClient.get(`/api/visualization/${sessionId}`, {
+        params: { user_id: userId },
+      });
       return response.data;
     },
 

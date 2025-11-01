@@ -26,6 +26,8 @@ class IdeaVisualization(BaseModel):
     raw_text: str = Field(..., description="Original text")
     closest_idea_id: UUID | None = Field(None, description="ID of the closest idea at submission time")
     timestamp: str = Field(..., description="Creation timestamp (ISO format)")
+    vote_count: int = Field(0, description="Number of upvotes")
+    user_has_voted: bool = Field(False, description="Whether the current user has voted for this idea")
 
 
 class ClusterResponse(BaseModel):

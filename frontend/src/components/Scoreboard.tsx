@@ -15,9 +15,13 @@ interface Props {
   onHoverIdea?: (ideaId: string | null) => void;
   onHoverUser?: (userId: string | null) => void;
   onDeleteIdea?: (ideaId: string, adminPassword?: string) => Promise<void>;
+  onVoteIdea?: (ideaId: string) => Promise<void>;
+  onUnvoteIdea?: (ideaId: string) => Promise<void>;
+  onUserFilterChange?: (userId: string | null) => void;
 }
 
 type TabType = 'scoreboard' | 'myIdeas' | 'allIdeas';
+type SortOrder = 'latest' | 'score' | 'upvote';
 
 // Common idea card component
 const IdeaCard = ({
@@ -29,6 +33,8 @@ const IdeaCard = ({
   onHoverIdea,
   showUserInfo = false,
   onDeleteIdea,
+  onVoteIdea,
+  onUnvoteIdea,
 }: {
   idea: IdeaVisualization;
   index: number;
@@ -38,6 +44,8 @@ const IdeaCard = ({
   onHoverIdea?: (ideaId: string | null) => void;
   showUserInfo?: boolean;
   onDeleteIdea?: (ideaId: string, adminPassword?: string) => Promise<void>;
+  onVoteIdea?: (ideaId: string) => Promise<void>;
+  onUnvoteIdea?: (ideaId: string) => Promise<void>;
 }) => {
   const isMyIdea = idea.user_id === currentUserId;
   const closestIdea = idea.closest_idea_id
@@ -97,13 +105,59 @@ const IdeaCard = ({
           )}
         </div>
         <div style={{
-          padding: '0.25rem 0.75rem',
-          borderRadius: '9999px',
-          background: `hsl(${idea.novelty_score * 1.2}, 70%, 85%)`,
-          fontSize: '0.875rem',
-          fontWeight: '600',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.5rem',
         }}>
-          {showUserInfo ? idea.novelty_score.toFixed(1) : `スコア: ${idea.novelty_score.toFixed(1)}`}
+          <div style={{
+            padding: '0.25rem 0.75rem',
+            borderRadius: '9999px',
+            background: `hsl(${idea.novelty_score * 1.2}, 70%, 85%)`,
+            fontSize: '0.875rem',
+            fontWeight: '600',
+          }}>
+            {showUserInfo ? idea.novelty_score.toFixed(1) : `スコア: ${idea.novelty_score.toFixed(1)}`}
+          </div>
+          {onVoteIdea && onUnvoteIdea && (
+            <button
+              onClick={async (e) => {
+                e.stopPropagation();
+                if (idea.user_has_voted) {
+                  await onUnvoteIdea(idea.id);
+                } else {
+                  await onVoteIdea(idea.id);
+                }
+              }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.25rem',
+                padding: '0.25rem 0.5rem',
+                background: idea.user_has_voted ? '#667eea' : 'transparent',
+                color: idea.user_has_voted ? 'white' : '#666',
+                border: idea.user_has_voted ? 'none' : '1px solid #ccc',
+                borderRadius: '9999px',
+                cursor: 'pointer',
+                fontSize: '0.75rem',
+                fontWeight: '600',
+                transition: 'all 0.2s',
+              }}
+              onMouseEnter={(e) => {
+                if (!idea.user_has_voted) {
+                  e.currentTarget.style.background = '#f0f0f0';
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (!idea.user_has_voted) {
+                  e.currentTarget.style.background = 'transparent';
+                }
+              }}
+              title={idea.user_has_voted ? 'upvoteを取り消す' : 'upvoteする'}
+            >
+              <span>👍</span>
+              <span>{idea.vote_count}</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -265,8 +319,35 @@ const IdeaCard = ({
   );
 };
 
-export const Scoreboard = ({ rankings, currentUserId, myIdeas, allIdeas, clusters, onHoverIdea, onHoverUser, onDeleteIdea }: Props) => {
+export const Scoreboard = ({ rankings, currentUserId, myIdeas, allIdeas, clusters, onHoverIdea, onHoverUser, onDeleteIdea, onVoteIdea, onUnvoteIdea, onUserFilterChange }: Props) => {
   const [activeTab, setActiveTab] = useState<TabType>('scoreboard');
+  const [sortOrder, setSortOrder] = useState<SortOrder>('latest');
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+
+  // Get unique users from all ideas
+  const uniqueUsers = Array.from(
+    new Map(allIdeas.map(idea => [idea.user_id, { id: idea.user_id, name: idea.user_name }])).values()
+  ).sort((a, b) => a.name.localeCompare(b.name));
+
+  // Filter and sort ideas based on current filters
+  const getFilteredAndSortedIdeas = (ideas: IdeaVisualization[]) => {
+    // Apply user filter
+    let filtered = selectedUserId
+      ? ideas.filter(idea => idea.user_id === selectedUserId)
+      : ideas;
+
+    // Apply sorting
+    switch (sortOrder) {
+      case 'latest':
+        return filtered.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+      case 'score':
+        return filtered.sort((a, b) => b.novelty_score - a.novelty_score);
+      case 'upvote':
+        return filtered.sort((a, b) => b.vote_count - a.vote_count);
+      default:
+        return filtered;
+    }
+  };
 
   return (
     <div style={{
@@ -488,6 +569,8 @@ export const Scoreboard = ({ rankings, currentUserId, myIdeas, allIdeas, cluster
                     onHoverIdea={onHoverIdea}
                     showUserInfo={false}
                     onDeleteIdea={onDeleteIdea}
+                    onVoteIdea={onVoteIdea}
+                    onUnvoteIdea={onUnvoteIdea}
                   />
                 ))}
             </div>
@@ -503,10 +586,105 @@ export const Scoreboard = ({ rankings, currentUserId, myIdeas, allIdeas, cluster
               まだアイディアがありません
             </div>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-              {allIdeas
-                .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-                .map((idea, index) => (
+            <>
+              {/* Filter controls */}
+              <div style={{
+                display: 'flex',
+                gap: '0.75rem',
+                marginBottom: '1rem',
+                flexWrap: 'wrap',
+                alignItems: 'center',
+              }}>
+                {/* Sort buttons */}
+                <div style={{
+                  display: 'flex',
+                  gap: '0.5rem',
+                  flexWrap: 'wrap',
+                }}>
+                  <button
+                    onClick={() => setSortOrder('latest')}
+                    style={{
+                      padding: '0.4rem 0.75rem',
+                      background: sortOrder === 'latest' ? '#667eea' : '#f0f0f0',
+                      color: sortOrder === 'latest' ? 'white' : '#666',
+                      border: 'none',
+                      borderRadius: '0.4rem',
+                      cursor: 'pointer',
+                      fontSize: '0.75rem',
+                      fontWeight: '600',
+                      transition: 'all 0.2s',
+                    }}
+                  >
+                    📅 最新
+                  </button>
+                  <button
+                    onClick={() => setSortOrder('score')}
+                    style={{
+                      padding: '0.4rem 0.75rem',
+                      background: sortOrder === 'score' ? '#667eea' : '#f0f0f0',
+                      color: sortOrder === 'score' ? 'white' : '#666',
+                      border: 'none',
+                      borderRadius: '0.4rem',
+                      cursor: 'pointer',
+                      fontSize: '0.75rem',
+                      fontWeight: '600',
+                      transition: 'all 0.2s',
+                    }}
+                  >
+                    ⭐ 点数
+                  </button>
+                  <button
+                    onClick={() => setSortOrder('upvote')}
+                    style={{
+                      padding: '0.4rem 0.75rem',
+                      background: sortOrder === 'upvote' ? '#667eea' : '#f0f0f0',
+                      color: sortOrder === 'upvote' ? 'white' : '#666',
+                      border: 'none',
+                      borderRadius: '0.4rem',
+                      cursor: 'pointer',
+                      fontSize: '0.75rem',
+                      fontWeight: '600',
+                      transition: 'all 0.2s',
+                    }}
+                  >
+                    👍 Upvote
+                  </button>
+                </div>
+
+                {/* User filter dropdown */}
+                <select
+                  value={selectedUserId || ''}
+                  onChange={(e) => {
+                    const newUserId = e.target.value || null;
+                    setSelectedUserId(newUserId);
+                    onUserFilterChange?.(newUserId);
+                    // Clear hover state when filter changes
+                    onHoverUser?.(null);
+                    onHoverIdea?.(null);
+                  }}
+                  style={{
+                    padding: '0.4rem 0.75rem',
+                    background: selectedUserId ? '#667eea' : '#f0f0f0',
+                    color: selectedUserId ? 'white' : '#666',
+                    border: 'none',
+                    borderRadius: '0.4rem',
+                    cursor: 'pointer',
+                    fontSize: '0.75rem',
+                    fontWeight: '600',
+                    transition: 'all 0.2s',
+                  }}
+                >
+                  <option value="">👥 全員</option>
+                  {uniqueUsers.map((user) => (
+                    <option key={user.id} value={user.id}>
+                      {user.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                {getFilteredAndSortedIdeas(allIdeas).map((idea, index) => (
                   <IdeaCard
                     key={idea.id}
                     idea={idea}
@@ -517,9 +695,12 @@ export const Scoreboard = ({ rankings, currentUserId, myIdeas, allIdeas, cluster
                     onHoverIdea={onHoverIdea}
                     showUserInfo={true}
                     onDeleteIdea={onDeleteIdea}
+                    onVoteIdea={onVoteIdea}
+                    onUnvoteIdea={onUnvoteIdea}
                   />
                 ))}
-            </div>
+              </div>
+            </>
           )
         )}
       </div>

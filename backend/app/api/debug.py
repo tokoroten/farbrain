@@ -19,6 +19,7 @@ from backend.app.models.cluster import Cluster
 from backend.app.models.idea import Idea
 from backend.app.models.session import Session
 from backend.app.models.user import User
+from backend.app.models.vote import Vote
 from backend.app.services.clustering import (
     ClusteringService,
     get_clustering_service,
@@ -906,6 +907,30 @@ async def create_test_session(
         await db.commit()
         logger.info(f"[TEST-SESSION] Created {len(cluster_ideas)} clusters with LLM labels")
 
+    # Create random votes for each user (100 votes per user)
+    logger.info("[TEST-SESSION] Creating random votes...")
+
+    # Get all idea IDs
+    all_idea_ids = [idea.id for idea in created_ideas]
+    vote_count = 0
+
+    for user_db_id, user_id, user_name in user_ids:
+        # Each user votes on 100 random ideas
+        num_votes = min(100, len(all_idea_ids))  # Don't exceed total number of ideas
+        voted_idea_ids = random.sample(all_idea_ids, num_votes)
+
+        for idea_id in voted_idea_ids:
+            vote = Vote(
+                id=str(uuid.uuid4()),
+                idea_id=idea_id,
+                user_id=user_db_id,  # Use the internal user DB ID
+            )
+            db.add(vote)
+            vote_count += 1
+
+    await db.commit()
+    logger.info(f"[TEST-SESSION] Created {vote_count} random votes ({num_votes} per user)")
+
     return {
         "message": "Test session created successfully",
         "session_id": session_id,
@@ -913,4 +938,5 @@ async def create_test_session(
         "user_count": len(user_ids),
         "idea_count": len(created_ideas),
         "cluster_count": len(cluster_ideas) if len(all_ideas) >= 3 else 0,
+        "vote_count": vote_count,
     }
