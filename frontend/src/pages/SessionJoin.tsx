@@ -127,22 +127,27 @@ export const SessionJoin = () => {
       }}>
         <div style={{
           background: 'white',
-          padding: '2rem',
+          padding: '3rem',
           borderRadius: '1rem',
+          boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
           textAlign: 'center',
+          maxWidth: '500px',
+          width: '90%',
         }}>
-          <p style={{ color: '#c33', marginBottom: '1rem' }}>
+          <p style={{ color: '#c33', marginBottom: '1.5rem', fontSize: '1.1rem' }}>
             セッションが見つかりませんでした
           </p>
           <button
             onClick={() => navigate('/sessions')}
             style={{
-              padding: '0.75rem 1.5rem',
-              background: '#667eea',
+              padding: '0.875rem 1.5rem',
+              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
               color: 'white',
               border: 'none',
               borderRadius: '0.5rem',
               cursor: 'pointer',
+              fontWeight: '600',
+              fontSize: '1rem',
             }}
           >
             セッション一覧に戻る
@@ -179,8 +184,9 @@ export const SessionJoin = () => {
     }}>
       <div style={{
         background: 'white',
-        padding: '2rem',
+        padding: '3rem',
         borderRadius: '1rem',
+        boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
         maxWidth: '500px',
         width: '90%',
       }}>

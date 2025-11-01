@@ -56,10 +56,10 @@ export const SessionList = () => {
     <div style={{
       minHeight: '100vh',
       background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-      padding: '1rem',
+      padding: '2rem 1rem',
     }}>
       <div style={{
-        maxWidth: '1600px',
+        maxWidth: '1400px',
         margin: '0 auto',
       }}>
         <div style={{
@@ -128,8 +128,9 @@ export const SessionList = () => {
 
         <div style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
           gap: '1.5rem',
+          justifyContent: 'center',
         }}>
           {sessions.length === 0 ? (
             <div style={{

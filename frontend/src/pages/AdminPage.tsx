@@ -126,7 +126,7 @@ export const AdminPage = () => {
           padding: '3rem',
           borderRadius: '1rem',
           boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
-          maxWidth: '800px',
+          maxWidth: '500px',
           width: '90%',
         }}>
           <h1 style={{
@@ -238,10 +238,10 @@ export const AdminPage = () => {
       <div style={{
         minHeight: '100vh',
         background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-        padding: '1rem',
+        padding: '2rem 1rem',
       }}>
         <div style={{
-          maxWidth: '1600px',
+          maxWidth: '1200px',
           margin: '0 auto',
         }}>
           <div style={{
@@ -405,16 +405,17 @@ export const AdminPage = () => {
     <div style={{
       minHeight: '100vh',
       background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-      padding: '1rem',
+      padding: '2rem 1rem',
     }}>
       <div style={{
-        maxWidth: '1600px',
+        maxWidth: '900px',
         margin: '0 auto',
       }}>
         <div style={{
           background: 'white',
-          padding: '2rem',
+          padding: '2.5rem',
           borderRadius: '1rem',
+          boxShadow: '0 10px 40px rgba(0,0,0,0.1)',
         }}>
           <div style={{
             display: 'flex',

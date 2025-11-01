@@ -74,9 +74,8 @@ export const Home = () => {
         padding: '3rem',
         borderRadius: '1rem',
         boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
-        maxWidth: '600px',
+        maxWidth: '500px',
         width: '90%',
-        margin: '0 auto',
       }}>
         {/* Backend Connection Error */}
         {backendConnected === false && (
