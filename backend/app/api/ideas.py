@@ -22,7 +22,7 @@ from backend.app.models.cluster import Cluster
 from backend.app.models.idea import Idea
 from backend.app.models.session import Session
 from backend.app.models.user import User
-from backend.app.schemas.idea import IdeaCreate, IdeaListResponse, IdeaResponse
+from backend.app.schemas.idea import IdeaCreate, IdeaListResponse, IdeaResponse, IdeaDelete
 from backend.app.services.clustering import get_clustering_service
 from backend.app.services.embedding import EmbeddingService, get_embedding_service
 from backend.app.services.llm import LLMService, get_llm_service
@@ -746,3 +746,106 @@ async def get_idea(
         closest_idea_id=idea.closest_idea_id,
         timestamp=idea.timestamp,
     )
+
+
+@router.delete("/{idea_id}", status_code=status.HTTP_200_OK)
+async def delete_idea(
+    idea_id: str,
+    delete_data: IdeaDelete,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """
+    Delete an idea.
+
+    Users can delete their own ideas.
+    Admins can delete any idea by providing the admin password.
+    """
+    logger.info(f"[DELETE-IDEA] Request to delete idea {idea_id} by user {delete_data.user_id}")
+
+    # Get the idea
+    result = await db.execute(
+        select(Idea).where(Idea.id == idea_id)
+    )
+    idea = result.scalar_one_or_none()
+
+    if not idea:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Idea not found"
+        )
+
+    # Check permissions
+    is_owner = str(idea.user_id) == str(delete_data.user_id)
+    is_admin = delete_data.admin_password == settings.admin_password
+
+    if not is_owner and not is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only delete your own ideas, or use admin password to delete others' ideas"
+        )
+
+    session_id = idea.session_id
+    user_id = idea.user_id
+
+    # Delete the idea
+    await db.delete(idea)
+
+    # Update user's idea count and total score
+    user_result = await db.execute(
+        select(User).where(
+            User.session_id == session_id,
+            User.user_id == user_id
+        )
+    )
+    user = user_result.scalar_one_or_none()
+
+    if user:
+        # Recalculate user's total score and idea count
+        ideas_result = await db.execute(
+            select(Idea).where(
+                Idea.session_id == session_id,
+                Idea.user_id == user_id
+            )
+        )
+        remaining_ideas = ideas_result.scalars().all()
+
+        user.idea_count = len(remaining_ideas)
+        user.total_score = sum(idea.novelty_score for idea in remaining_ideas)
+        db.add(user)
+
+    await db.commit()
+
+    logger.info(f"[DELETE-IDEA] Successfully deleted idea {idea_id}")
+
+    # Notify all clients in the session via WebSocket
+    await manager.broadcast_to_session(
+        session_id=str(session_id),
+        message={
+            "type": "idea_deleted",
+            "data": {
+                "idea_id": str(idea_id),
+                "user_id": str(user_id),
+            }
+        }
+    )
+
+    # Send updated scoreboard
+    # Fetch all users with updated scores
+    users_result = await db.execute(
+        select(User).where(User.session_id == session_id).order_by(User.total_score.desc())
+    )
+    users = users_result.scalars().all()
+
+    rankings = [
+        {
+            "user_id": user.user_id,
+            "name": user.name,
+            "total_score": user.total_score,
+            "idea_count": user.idea_count,
+        }
+        for user in users
+    ]
+
+    await manager.send_scoreboard_updated(session_id=str(session_id), rankings=rankings)
+
+    return {"message": "Idea deleted successfully", "idea_id": idea_id}

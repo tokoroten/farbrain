@@ -20,6 +20,7 @@ from backend.app.models.idea import Idea
 from backend.app.models.session import Session
 from backend.app.models.user import User
 from backend.app.services.clustering import (
+    ClusteringService,
     get_clustering_service,
     clear_clustering_service,
 )
@@ -647,7 +648,6 @@ async def create_test_session(
         id=session_id,
         title=f"テストセッション {timestamp}",
         description="自動生成されたテストセッション（300個の多様なアイデア）",
-        duration=999999999,  # Unlimited
         status="active",
         accepting_ideas=True,
     )

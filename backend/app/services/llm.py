@@ -242,9 +242,14 @@ class LLMService:
             raise ValueError("Raw text cannot be empty")
 
         # Default formatting prompt
+        system_prompt = None
+
         if custom_prompt:
-            # Custom prompt might use {raw_text} placeholder
-            prompt = custom_prompt.replace("{raw_text}", raw_text)
+            # Append raw_text to the end of custom prompt
+            prompt = f"""{custom_prompt}
+
+{raw_text}"""
+            # Note: custom_prompt is treated as user prompt, no system prompt
         else:
             # Use default system prompt
             system_prompt = DEFAULT_FORMATTING_SYSTEM_PROMPT
@@ -269,7 +274,7 @@ class LLMService:
 
         formatted_text = await self.provider.generate(
             prompt,
-            system_prompt=system_prompt if not custom_prompt else None,
+            system_prompt=system_prompt,
             temperature=0.7
         )
 

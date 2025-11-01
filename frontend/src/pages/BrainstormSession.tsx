@@ -163,6 +163,17 @@ export const BrainstormSession = () => {
         // Optionally show notification
         console.log(`${event.data.user_name} joined the session`);
         break;
+
+      case 'idea_deleted':
+        // Remove the deleted idea from the list
+        setIdeas((prev) => prev.filter((idea) => idea.id !== event.data.idea_id));
+        // Clear selection if the deleted idea was selected
+        if (selectedIdea && selectedIdea.id === event.data.idea_id) {
+          setSelectedIdea(null);
+        }
+        // Refresh scoreboard
+        fetchScoreboard();
+        break;
     }
   }
 
@@ -180,6 +191,22 @@ export const BrainstormSession = () => {
     } catch (err) {
       console.error('Failed to submit idea:', err);
       throw err;
+    }
+  };
+
+  const handleDeleteIdea = async (ideaId: string, adminPassword?: string) => {
+    if (!userId) return;
+
+    try {
+      await api.ideas.delete(ideaId, userId, adminPassword);
+      // Idea will be removed via WebSocket
+    } catch (err: any) {
+      console.error('Failed to delete idea:', err);
+      if (err.response?.status === 403) {
+        alert('削除権限がありません。自分のアイディアのみ削除できます。');
+      } else {
+        alert('アイディアの削除に失敗しました');
+      }
     }
   };
 
@@ -556,6 +583,7 @@ export const BrainstormSession = () => {
               hoveredIdeaId={hoveredIdeaId}
               hoveredUserId={hoveredUserId}
               currentUserId={userId || undefined}
+              onDeleteIdea={handleDeleteIdea}
             />
           </div>
 
@@ -602,6 +630,7 @@ export const BrainstormSession = () => {
             clusters={clusters}
             onHoverIdea={setHoveredIdeaId}
             onHoverUser={setHoveredUserId}
+            onDeleteIdea={handleDeleteIdea}
           />
         </div>
       </div>
@@ -732,6 +761,66 @@ export const BrainstormSession = () => {
                 </div>
               ) : null;
             })()}
+
+            {/* Delete button section */}
+            <div style={{ marginTop: '1.5rem', paddingTop: '1rem', borderTop: '1px solid #e0e0e0' }}>
+              {selectedIdea.user_id === userId ? (
+                <button
+                  onClick={async () => {
+                    if (confirm('このアイディアを削除しますか？')) {
+                      await handleDeleteIdea(selectedIdea.id);
+                      setSelectedIdea(null);
+                    }
+                  }}
+                  style={{
+                    background: '#ff4444',
+                    color: 'white',
+                    border: 'none',
+                    padding: '0.5rem 1rem',
+                    borderRadius: '0.5rem',
+                    cursor: 'pointer',
+                    fontSize: '0.9rem',
+                    fontWeight: '600',
+                  }}
+                >
+                  削除
+                </button>
+              ) : (
+                <button
+                  onMouseDown={(e) => {
+                    const startTime = Date.now();
+                    const checkLongPress = setInterval(() => {
+                      const elapsed = Date.now() - startTime;
+                      if (elapsed >= 5000) {
+                        clearInterval(checkLongPress);
+                        const password = prompt('管理者パスワードを入力してください:');
+                        if (password) {
+                          handleDeleteIdea(selectedIdea.id, password);
+                          setSelectedIdea(null);
+                        }
+                      }
+                    }, 100);
+
+                    const cleanup = () => {
+                      clearInterval(checkLongPress);
+                      window.removeEventListener('mouseup', cleanup);
+                    };
+                    window.addEventListener('mouseup', cleanup);
+                  }}
+                  style={{
+                    background: '#999',
+                    color: 'white',
+                    border: 'none',
+                    padding: '0.5rem 1rem',
+                    borderRadius: '0.5rem',
+                    cursor: 'pointer',
+                    fontSize: '0.9rem',
+                  }}
+                >
+                  長押し（5秒）で管理者削除
+                </button>
+              )}
+            </div>
           </div>
         </div>
       )}

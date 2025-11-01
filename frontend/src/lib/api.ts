@@ -138,6 +138,16 @@ export const api = {
       const response = await apiClient.get(`/api/ideas/${sessionId}/${ideaId}`);
       return response.data;
     },
+
+    delete: async (ideaId: string, userId: string, adminPassword?: string): Promise<{ message: string; idea_id: string }> => {
+      const response = await apiClient.delete(`/api/ideas/${ideaId}`, {
+        data: {
+          user_id: userId,
+          admin_password: adminPassword || null,
+        },
+      });
+      return response.data;
+    },
   },
 
   // Visualization endpoints

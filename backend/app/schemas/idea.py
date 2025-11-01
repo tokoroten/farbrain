@@ -46,3 +46,10 @@ class IdeaListResponse(BaseModel):
 
     ideas: list[IdeaResponse] = Field(..., description="List of ideas")
     total: int = Field(..., description="Total number of ideas")
+
+
+class IdeaDelete(BaseModel):
+    """Schema for deleting an idea."""
+
+    user_id: UUID = Field(..., description="User ID requesting deletion")
+    admin_password: str | None = Field(None, description="Admin password for deleting other users' ideas")

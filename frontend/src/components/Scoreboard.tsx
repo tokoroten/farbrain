@@ -14,6 +14,7 @@ interface Props {
   clusters: ClusterData[];
   onHoverIdea?: (ideaId: string | null) => void;
   onHoverUser?: (userId: string | null) => void;
+  onDeleteIdea?: (ideaId: string, adminPassword?: string) => Promise<void>;
 }
 
 type TabType = 'scoreboard' | 'myIdeas' | 'allIdeas';
@@ -27,6 +28,7 @@ const IdeaCard = ({
   currentUserId,
   onHoverIdea,
   showUserInfo = false,
+  onDeleteIdea,
 }: {
   idea: IdeaVisualization;
   index: number;
@@ -35,6 +37,7 @@ const IdeaCard = ({
   currentUserId: string;
   onHoverIdea?: (ideaId: string | null) => void;
   showUserInfo?: boolean;
+  onDeleteIdea?: (ideaId: string, adminPassword?: string) => Promise<void>;
 }) => {
   const isMyIdea = idea.user_id === currentUserId;
   const closestIdea = idea.closest_idea_id
@@ -188,11 +191,81 @@ const IdeaCard = ({
           )}
         </div>
       )}
+
+      {/* Delete button */}
+      {onDeleteIdea && (
+        <div style={{ marginTop: '0.25rem', textAlign: 'right', lineHeight: 1 }}>
+          {isMyIdea ? (
+            <button
+              onClick={async (e) => {
+                e.stopPropagation();
+                if (confirm('このアイディアを削除しますか？')) {
+                  await onDeleteIdea(idea.id);
+                }
+              }}
+              style={{
+                background: 'transparent',
+                color: '#ddd',
+                border: 'none',
+                padding: '0 0.25rem',
+                cursor: 'pointer',
+                fontSize: '0.65rem',
+                transition: 'color 0.2s',
+                opacity: 0.4,
+                lineHeight: 1,
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.color = '#ff6b6b';
+                e.currentTarget.style.opacity = '1';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.color = '#ddd';
+                e.currentTarget.style.opacity = '0.4';
+              }}
+              title="削除"
+            >
+              delete
+            </button>
+          ) : (
+            <button
+              onClick={async (e) => {
+                e.stopPropagation();
+                const password = prompt('管理者パスワードを入力してください:');
+                if (password) {
+                  await onDeleteIdea(idea.id, password);
+                }
+              }}
+              style={{
+                background: 'transparent',
+                color: '#ddd',
+                border: 'none',
+                padding: '0 0.25rem',
+                cursor: 'pointer',
+                fontSize: '0.65rem',
+                transition: 'color 0.2s',
+                opacity: 0.3,
+                lineHeight: 1,
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.color = '#999';
+                e.currentTarget.style.opacity = '0.8';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.color = '#ddd';
+                e.currentTarget.style.opacity = '0.3';
+              }}
+              title="管理者削除"
+            >
+              delete
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 };
 
-export const Scoreboard = ({ rankings, currentUserId, myIdeas, allIdeas, clusters, onHoverIdea, onHoverUser }: Props) => {
+export const Scoreboard = ({ rankings, currentUserId, myIdeas, allIdeas, clusters, onHoverIdea, onHoverUser, onDeleteIdea }: Props) => {
   const [activeTab, setActiveTab] = useState<TabType>('scoreboard');
 
   return (
@@ -414,6 +487,7 @@ export const Scoreboard = ({ rankings, currentUserId, myIdeas, allIdeas, cluster
                     currentUserId={currentUserId}
                     onHoverIdea={onHoverIdea}
                     showUserInfo={false}
+                    onDeleteIdea={onDeleteIdea}
                   />
                 ))}
             </div>
@@ -442,6 +516,7 @@ export const Scoreboard = ({ rankings, currentUserId, myIdeas, allIdeas, cluster
                     currentUserId={currentUserId}
                     onHoverIdea={onHoverIdea}
                     showUserInfo={true}
+                    onDeleteIdea={onDeleteIdea}
                   />
                 ))}
             </div>
