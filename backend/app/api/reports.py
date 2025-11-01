@@ -189,7 +189,7 @@ async def generate_report_markdown(
     md_lines.append(f"**テーマ**: {session.title}")
     if session.description:
         md_lines.append(f"**説明**: {session.description}")
-    md_lines.append(f"**実施期間**: {session.start_time.strftime('%Y/%m/%d %H:%M')} - {session.ended_at.strftime('%Y/%m/%d %H:%M') if session.ended_at else '進行中'}")
+    md_lines.append(f"**実施期間**: {session.start_time.strftime('%Y/%m/%d %H:%M')} - {'終了' if session.status == 'ended' else '進行中'}")
     md_lines.append(f"**参加者数**: {len(users_dict)}名")
     md_lines.append(f"**総アイディア数**: {len(ideas)}件")
     md_lines.append(f"**テーマ（クラスタ）数**: {len(clusters_dict)}個")

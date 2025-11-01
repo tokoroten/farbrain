@@ -13,6 +13,7 @@ interface Props {
   hoveredIdeaId?: string | null;
   hoveredUserId?: string | null;
   currentUserId?: string;
+  onDeleteIdea: (ideaId: string, adminPassword?: string) => Promise<void>;
 }
 
 // Generate consistent color for user based on user_id
@@ -29,7 +30,7 @@ const getUserColor = (userId: string): string => {
 
 export const getUserColorFromId = getUserColor; // Export for use in Scoreboard
 
-export const VisualizationCanvas = ({ ideas, clusters, selectedIdea, onSelectIdea, hoveredIdeaId, hoveredUserId, currentUserId }: Props) => {
+export const VisualizationCanvas = ({ ideas, clusters, selectedIdea, onSelectIdea, hoveredIdeaId, hoveredUserId, currentUserId, onDeleteIdea }: Props) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
