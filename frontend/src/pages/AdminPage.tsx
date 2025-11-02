@@ -43,6 +43,7 @@ export const AdminPage = () => {
   const [editForm, setEditForm] = useState({
     title: '',
     description: '',
+    hasPassword: false,
     password: '',
     formatting_prompt: '',
     summarization_prompt: '',
@@ -54,6 +55,7 @@ export const AdminPage = () => {
   const [formData, setFormData] = useState({
     title: '',
     description: '',
+    hasPassword: false,
     password: '',
     formatting_prompt: DEFAULT_FORMATTING_PROMPT,
     summarization_prompt: DEFAULT_SUMMARIZATION_PROMPT,
@@ -128,11 +130,13 @@ export const AdminPage = () => {
       title: session.title,
       enable_dialogue_mode: session.enable_dialogue_mode,
       enable_variation_mode: session.enable_variation_mode,
+      has_password: session.has_password,
     });
     setEditingSession(session);
     setEditForm({
       title: session.title,
       description: session.description || '',
+      hasPassword: session.has_password,
       password: '',
       formatting_prompt: session.formatting_prompt || '',
       summarization_prompt: session.summarization_prompt || '',
@@ -185,7 +189,17 @@ export const AdminPage = () => {
       const updateData: any = {};
       if (editForm.title.trim()) updateData.title = editForm.title.trim();
       if (editForm.description.trim()) updateData.description = editForm.description.trim();
-      if (editForm.password.trim()) updateData.password = editForm.password.trim();
+
+      // Password handling based on checkbox
+      if (!editForm.hasPassword) {
+        // Password protection disabled - remove password
+        updateData.password = null;
+      } else if (editForm.password.trim()) {
+        // Password protection enabled and new password provided
+        updateData.password = editForm.password.trim();
+      }
+      // If hasPassword is true but password field is empty, keep existing password
+
       if (editForm.formatting_prompt.trim()) updateData.formatting_prompt = editForm.formatting_prompt.trim();
       if (editForm.summarization_prompt.trim()) updateData.summarization_prompt = editForm.summarization_prompt.trim();
       updateData.enable_dialogue_mode = editForm.enable_dialogue_mode;
@@ -239,7 +253,7 @@ export const AdminPage = () => {
       const session = await api.sessions.create({
         title: formData.title.trim(),
         description: formData.description.trim() || undefined,
-        password: formData.password || undefined,
+        password: formData.hasPassword ? (formData.password || undefined) : undefined,
         formatting_prompt: formData.formatting_prompt || undefined,
         summarization_prompt: formData.summarization_prompt || undefined,
         enable_dialogue_mode: formData.enable_dialogue_mode,
@@ -862,23 +876,43 @@ export const AdminPage = () => {
                   </div>
 
                   <div style={{ marginBottom: '0.75rem' }}>
-                    <label style={{ display: 'block', marginBottom: '0.4rem', fontWeight: '600', fontSize: '0.9rem' }}>
-                      パスワード（変更する場合のみ入力）
+                    <label style={{ display: 'block', marginBottom: '0.6rem', fontWeight: '600', fontSize: '0.9rem' }}>
+                      パスワード設定
                     </label>
-                    <input
-                      type="password"
-                      value={editForm.password}
-                      onChange={(e) => setEditForm({ ...editForm, password: e.target.value })}
-                      style={{
-                        width: '100%',
-                        padding: '0.6rem',
-                        border: '1px solid #e0e0e0',
-                        borderRadius: '0.4rem',
-                        fontSize: '0.9rem',
-                        boxSizing: 'border-box',
-                      }}
-                      placeholder="空欄で変更なし"
-                    />
+                    <label style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.5rem',
+                      marginBottom: '0.5rem',
+                      cursor: 'pointer',
+                      padding: '0.5rem',
+                      borderRadius: '0.4rem',
+                      background: '#f8f9fa',
+                    }}>
+                      <input
+                        type="checkbox"
+                        checked={editForm.hasPassword}
+                        onChange={(e) => setEditForm({ ...editForm, hasPassword: e.target.checked })}
+                        style={{ cursor: 'pointer', width: '16px', height: '16px' }}
+                      />
+                      <span style={{ fontSize: '0.9rem' }}>パスワード保護を有効にする</span>
+                    </label>
+                    {editForm.hasPassword && (
+                      <input
+                        type="password"
+                        value={editForm.password}
+                        onChange={(e) => setEditForm({ ...editForm, password: e.target.value })}
+                        style={{
+                          width: '100%',
+                          padding: '0.6rem',
+                          border: '1px solid #e0e0e0',
+                          borderRadius: '0.4rem',
+                          fontSize: '0.9rem',
+                          boxSizing: 'border-box',
+                        }}
+                        placeholder={editingSession?.has_password ? "新しいパスワード（変更する場合）" : "パスワードを入力"}
+                      />
+                    )}
                   </div>
 
                   <div style={{ marginBottom: '0.75rem' }}>
@@ -1117,26 +1151,47 @@ export const AdminPage = () => {
             <div style={{ marginBottom: '1.5rem' }}>
               <label style={{
                 display: 'block',
-                marginBottom: '0.5rem',
+                marginBottom: '0.75rem',
                 fontWeight: '600',
               }}>
-                パスワード（オプション）
+                パスワード設定
               </label>
-              <input
-                type="password"
-                value={formData.password}
-                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                placeholder="空欄の場合はパスワード保護なし"
-                disabled={isLoading}
-                style={{
-                  width: '100%',
-                  padding: '0.75rem',
-                  border: '2px solid #e0e0e0',
-                  borderRadius: '0.5rem',
-                  fontSize: '1rem',
-                  boxSizing: 'border-box',
-                }}
-              />
+              <label style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+                marginBottom: '0.75rem',
+                cursor: 'pointer',
+                padding: '0.5rem',
+                borderRadius: '0.5rem',
+                background: '#f8f9fa',
+              }}>
+                <input
+                  type="checkbox"
+                  checked={formData.hasPassword}
+                  onChange={(e) => setFormData({ ...formData, hasPassword: e.target.checked })}
+                  disabled={isLoading}
+                  style={{ cursor: 'pointer', width: '18px', height: '18px' }}
+                />
+                <span>パスワード保護を有効にする</span>
+              </label>
+              {formData.hasPassword && (
+                <input
+                  type="password"
+                  value={formData.password}
+                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                  placeholder="パスワードを入力"
+                  disabled={isLoading}
+                  style={{
+                    width: '100%',
+                    padding: '0.75rem',
+                    border: '2px solid #e0e0e0',
+                    borderRadius: '0.5rem',
+                    fontSize: '1rem',
+                    boxSizing: 'border-box',
+                  }}
+                />
+              )}
             </div>
 
             <div style={{ marginBottom: '1.5rem' }}>

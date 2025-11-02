@@ -201,8 +201,16 @@ async def update_session(
         session.title = session_update.title
     if session_update.description is not None:
         session.description = session_update.description
-    if session_update.password is not None:
-        session.password_hash = hash_password(session_update.password)
+
+    # Handle password update/removal
+    if "password" in session_update.model_fields_set:
+        if session_update.password is None:
+            # Explicitly remove password protection
+            session.password_hash = None
+        else:
+            # Set or update password
+            session.password_hash = hash_password(session_update.password)
+
     if session_update.accepting_ideas is not None:
         session.accepting_ideas = session_update.accepting_ideas
     if session_update.formatting_prompt is not None:
