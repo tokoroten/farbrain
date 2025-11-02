@@ -3,6 +3,7 @@
  */
 
 import axios from 'axios';
+import { downloadFile } from '../utils/download';
 import type {
   Session,
   SessionCreateRequest,
@@ -17,6 +18,8 @@ import type {
   IdeaListResponse,
   VisualizationResponse,
   ScoreboardResponse,
+  VariationRequest,
+  VariationResponse,
 } from '../types/api';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
@@ -99,26 +102,10 @@ export const api = {
         responseType: 'blob',
       });
 
-      // Create a download link
-      const url = window.URL.createObjectURL(new Blob([response.data]));
-      const link = document.createElement('a');
-      link.href = url;
-
-      // Extract filename from Content-Disposition header or use default
-      const contentDisposition = response.headers['content-disposition'];
-      let filename = `ideas_${sessionId}_${new Date().toISOString().split('T')[0]}.csv`;
-      if (contentDisposition) {
-        const filenameMatch = contentDisposition.match(/filename="?(.+)"?/);
-        if (filenameMatch) {
-          filename = filenameMatch[1];
-        }
-      }
-
-      link.setAttribute('download', filename);
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.URL.revokeObjectURL(url);
+      await downloadFile(
+        response,
+        `ideas_${sessionId}_${new Date().toISOString().split('T')[0]}.csv`
+      );
     },
   },
 
@@ -211,6 +198,14 @@ export const api = {
     },
   },
 
+  // Dialogue endpoints
+  dialogue: {
+    generateVariations: async (data: VariationRequest): Promise<VariationResponse> => {
+      const response = await apiClient.post('/api/dialogue/variations', data);
+      return response.data;
+    },
+  },
+
   // Report endpoints
   reports: {
     downloadMarkdown: async (sessionId: string): Promise<void> => {
@@ -218,34 +213,10 @@ export const api = {
         responseType: 'blob',
       });
 
-      // Create a download link
-      const url = window.URL.createObjectURL(new Blob([response.data]));
-      const link = document.createElement('a');
-      link.href = url;
-
-      // Extract filename from Content-Disposition header or use default
-      const contentDisposition = response.headers['content-disposition'];
-      let filename = `report_${sessionId}_${new Date().toISOString().split('T')[0]}.md`;
-
-      if (contentDisposition) {
-        // Handle RFC 5987 encoding: filename*=UTF-8''encoded_name
-        const filenameStarMatch = contentDisposition.match(/filename\*=UTF-8''(.+)/);
-        if (filenameStarMatch) {
-          filename = decodeURIComponent(filenameStarMatch[1]);
-        } else {
-          // Fallback to standard filename
-          const filenameMatch = contentDisposition.match(/filename="?(.+)"?/);
-          if (filenameMatch) {
-            filename = filenameMatch[1];
-          }
-        }
-      }
-
-      link.setAttribute('download', filename);
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.URL.revokeObjectURL(url);
+      await downloadFile(
+        response,
+        `report_${sessionId}_${new Date().toISOString().split('T')[0]}.md`
+      );
     },
 
     downloadPDF: async (sessionId: string): Promise<void> => {
@@ -253,34 +224,10 @@ export const api = {
         responseType: 'blob',
       });
 
-      // Create a download link
-      const url = window.URL.createObjectURL(new Blob([response.data]));
-      const link = document.createElement('a');
-      link.href = url;
-
-      // Extract filename from Content-Disposition header or use default
-      const contentDisposition = response.headers['content-disposition'];
-      let filename = `report_${sessionId}_${new Date().toISOString().split('T')[0]}.pdf`;
-
-      if (contentDisposition) {
-        // Handle RFC 5987 encoding: filename*=UTF-8''encoded_name
-        const filenameStarMatch = contentDisposition.match(/filename\*=UTF-8''(.+)/);
-        if (filenameStarMatch) {
-          filename = decodeURIComponent(filenameStarMatch[1]);
-        } else {
-          // Fallback to standard filename
-          const filenameMatch = contentDisposition.match(/filename="?(.+)"?/);
-          if (filenameMatch) {
-            filename = filenameMatch[1];
-          }
-        }
-      }
-
-      link.setAttribute('download', filename);
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.URL.revokeObjectURL(url);
+      await downloadFile(
+        response,
+        `report_${sessionId}_${new Date().toISOString().split('T')[0]}.pdf`
+      );
     },
   },
 };

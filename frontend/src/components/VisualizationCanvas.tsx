@@ -4,6 +4,7 @@
 
 import { useRef, useEffect, useState } from 'react';
 import type { IdeaVisualization, ClusterData } from '../types/api';
+import { useCoordinateTransform } from '../hooks/useCoordinateTransform';
 
 interface Props {
   ideas: IdeaVisualization[];
@@ -16,6 +17,7 @@ interface Props {
   onDeleteIdea: (ideaId: string, adminPassword?: string) => Promise<void>;
   recentlyVotedIdeaIds?: string[];
   filteredUserId?: string | null;
+  filteredClusterId?: number | null;
 }
 
 // Generate consistent color for user based on user_id
@@ -32,7 +34,7 @@ const getUserColor = (userId: string): string => {
 
 export const getUserColorFromId = getUserColor; // Export for use in Scoreboard
 
-export const VisualizationCanvas = ({ ideas, clusters, selectedIdea, onSelectIdea, hoveredIdeaId, hoveredUserId, currentUserId, onDeleteIdea, recentlyVotedIdeaIds = [], filteredUserId }: Props) => {
+export const VisualizationCanvas = ({ ideas, clusters, selectedIdea, onSelectIdea, hoveredIdeaId, hoveredUserId, currentUserId, onDeleteIdea, recentlyVotedIdeaIds = [], filteredUserId, filteredClusterId }: Props) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
@@ -47,6 +49,9 @@ export const VisualizationCanvas = ({ ideas, clusters, selectedIdea, onSelectIde
   const [pulseAnimation, setPulseAnimation] = useState(0);
   const animationFrameRef = useRef<number | null>(null);
   const prevIdeasCountRef = useRef(ideas.length);
+
+  // Calculate coordinate transformation (memoized)
+  const { toScreenX, toScreenY } = useCoordinateTransform(ideas, dimensions, transform);
 
   // Track latest ideas and start pulse animation
   useEffect(() => {
@@ -162,33 +167,6 @@ export const VisualizationCanvas = ({ ideas, clusters, selectedIdea, onSelectIde
     // Clear canvas
     ctx.clearRect(0, 0, dimensions.width, dimensions.height);
 
-    // Calculate bounds
-    const padding = 50;
-    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-
-    ideas.forEach((idea) => {
-      minX = Math.min(minX, idea.x);
-      maxX = Math.max(maxX, idea.x);
-      minY = Math.min(minY, idea.y);
-      maxY = Math.max(maxY, idea.y);
-    });
-
-    const dataWidth = maxX - minX || 1;
-    const dataHeight = maxY - minY || 1;
-    const scaleX = (dimensions.width - 2 * padding) / dataWidth;
-    const scaleY = (dimensions.height - 2 * padding) / dataHeight;
-    const scale = Math.min(scaleX, scaleY) * transform.scale;
-
-    const centerX = dimensions.width / 2;
-    const centerY = dimensions.height / 2;
-    const dataCenterX = (minX + maxX) / 2;
-    const dataCenterY = (minY + maxY) / 2;
-
-    const toScreenX = (x: number) =>
-      (x - dataCenterX) * scale + centerX + transform.x;
-    const toScreenY = (y: number) =>
-      (y - dataCenterY) * scale + centerY + transform.y;
-
     // Draw clusters (convex hulls)
     clusters.forEach((cluster) => {
       if (cluster.convex_hull.length < 3) return;
@@ -290,7 +268,8 @@ export const VisualizationCanvas = ({ ideas, clusters, selectedIdea, onSelectIde
       const isHovered = hoveredIdeaId === idea.id;
       const isUserHovered = hoveredUserId ? idea.user_id === hoveredUserId : true; // true when no hover
       const isFilteredUser = filteredUserId ? idea.user_id === filteredUserId : true; // true when no filter
-      const isDimmed = (hoveredIdeaId && !isHovered) || (hoveredUserId && !isUserHovered) || (filteredUserId && !isFilteredUser);
+      const isFilteredCluster = filteredClusterId !== null ? idea.cluster_id === filteredClusterId : true; // true when no filter
+      const isDimmed = (hoveredIdeaId && !isHovered) || (hoveredUserId && !isUserHovered) || (filteredUserId && !isFilteredUser) || (filteredClusterId !== null && !isFilteredCluster);
 
       // Set global alpha for dimming effect
       if (isDimmed) {
@@ -426,7 +405,7 @@ export const VisualizationCanvas = ({ ideas, clusters, selectedIdea, onSelectIde
     // Reset global alpha
     ctx.globalAlpha = 1.0;
 
-  }, [ideas, clusters, dimensions, transform, selectedIdea, myLatestIdeaId, othersRecentIdeaIds, recentlyVotedIdeaIds, pulseAnimation, hoveredIdeaId, hoveredUserId, filteredUserId]);
+  }, [ideas, clusters, dimensions, transform, selectedIdea, myLatestIdeaId, othersRecentIdeaIds, recentlyVotedIdeaIds, pulseAnimation, hoveredIdeaId, hoveredUserId, filteredUserId, toScreenX, toScreenY]);
 
   // Mouse handlers
   const handleMouseDown = (e: React.MouseEvent) => {
@@ -449,33 +428,6 @@ export const VisualizationCanvas = ({ ideas, clusters, selectedIdea, onSelectIde
       const rect = canvas.getBoundingClientRect();
       const mouseX = e.clientX - rect.left;
       const mouseY = e.clientY - rect.top;
-
-      // Calculate coordinate transformation (same as click handler)
-      const padding = 50;
-      let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-
-      ideas.forEach((idea) => {
-        minX = Math.min(minX, idea.x);
-        maxX = Math.max(maxX, idea.x);
-        minY = Math.min(minY, idea.y);
-        maxY = Math.max(maxY, idea.y);
-      });
-
-      const dataWidth = maxX - minX || 1;
-      const dataHeight = maxY - minY || 1;
-      const scaleX = (dimensions.width - 2 * padding) / dataWidth;
-      const scaleY = (dimensions.height - 2 * padding) / dataHeight;
-      const scale = Math.min(scaleX, scaleY) * transform.scale;
-
-      const centerX = dimensions.width / 2;
-      const centerY = dimensions.height / 2;
-      const dataCenterX = (minX + maxX) / 2;
-      const dataCenterY = (minY + maxY) / 2;
-
-      const toScreenX = (x: number) =>
-        (x - dataCenterX) * scale + centerX + transform.x;
-      const toScreenY = (y: number) =>
-        (y - dataCenterY) * scale + centerY + transform.y;
 
       // Helper function to check if point is inside polygon (ray casting algorithm)
       const isPointInPolygon = (px: number, py: number, polygon: { x: number; y: number }[]) => {
