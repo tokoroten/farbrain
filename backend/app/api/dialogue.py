@@ -26,6 +26,14 @@ class DialogueRequest(BaseModel):
     session_id: str | None = None  # Optional session ID for context
 
 
+class VariationRequest(BaseModel):
+    """Request for generating variations of an idea."""
+
+    keyword: str
+    session_id: str
+    count: int = 10
+
+
 @router.post("/deepen")
 async def deepen_idea(
     request: DialogueRequest,
@@ -166,4 +174,61 @@ async def finalize_idea(
         raise HTTPException(
             status_code=500,
             detail=f"Failed to finalize idea: {str(e)}",
+        )
+
+
+@router.post("/variations")
+async def generate_variations(
+    request: VariationRequest,
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """
+    Generate variations of an idea keyword.
+
+    Args:
+        request: Variation request with keyword and count
+        db: Database session
+
+    Returns:
+        List of generated idea variations
+
+    Raises:
+        HTTPException: If session not found or LLM fails
+    """
+    # Get session context
+    session_result = await db.execute(
+        select(Session).where(Session.id == request.session_id)
+    )
+    session = session_result.scalar_one_or_none()
+
+    if not session:
+        raise HTTPException(
+            status_code=404,
+            detail="Session not found"
+        )
+
+    # Check if session is accepting new ideas
+    if not session.accepting_ideas:
+        raise HTTPException(
+            status_code=403,
+            detail="このセッションは停止されているため、新しいアイデアを投稿できません"
+        )
+
+    llm_service = get_llm_service()
+
+    try:
+        variations = await llm_service.generate_variations(
+            keyword=request.keyword,
+            session_context=session.description,
+            count=request.count
+        )
+
+        return {
+            "variations": variations
+        }
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to generate variations: {str(e)}",
         )

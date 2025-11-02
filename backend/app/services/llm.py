@@ -455,6 +455,83 @@ class LLMService:
 
         return idea
 
+    async def generate_variations(
+        self,
+        keyword: str,
+        session_context: str | None = None,
+        count: int = 10,
+    ) -> list[str]:
+        """
+        Generate variations of an idea keyword.
+
+        Args:
+            keyword: Base keyword/idea to generate variations from
+            session_context: Optional session description/theme for context
+            count: Number of variations to generate (default: 10)
+
+        Returns:
+            List of idea variations
+
+        Raises:
+            ValueError: If keyword is empty
+            httpx.HTTPError: If LLM API fails
+        """
+        logger.info(f"[LLM METHOD] generate_variations() called with keyword='{keyword[:100]}...', has_session_context={session_context is not None}, count={count}")
+
+        if not keyword.strip():
+            raise ValueError("Keyword cannot be empty")
+
+        # System prompt for variation generation
+        system_prompt = """あなたはブレインストーミングセッションのファシリテーターです。
+与えられたキーワードやアイデアから、創造的なバリエーションを生成するのがあなたの役割です。
+
+バリエーション生成の原則:
+- 元のアイデアの本質を保ちながら、異なる角度から発展させる
+- 具体性を高める、抽象度を上げる、適用領域を変える、など多様な変化を加える
+- 各バリエーションは簡潔に1-2文で表現する
+- 実現可能性を考慮しつつ、創造的であること
+- 各バリエーションは1行ずつ箇条書きで出力する（番号や記号は不要）"""
+
+        # Add session context if available
+        if session_context:
+            system_prompt += f"\n\nセッションのテーマ・目的:\n{session_context}\n\n上記のコンテキストを考慮してバリエーションを生成してください。"
+
+        prompt = f"""以下のキーワード・アイデアから、{count}個の創造的なバリエーションを生成してください:
+
+{keyword}
+
+各バリエーションを1行ずつ出力してください（番号や記号は不要）。"""
+
+        response = await self.provider.generate(
+            prompt,
+            system_prompt=system_prompt,
+            temperature=0.9,  # Higher temperature for more creativity
+            max_tokens=800,
+        )
+
+        # Parse variations from response (split by newlines, filter empty lines)
+        variations = [
+            line.strip()
+            for line in response.strip().split('\n')
+            if line.strip() and not line.strip().startswith('#')
+        ]
+
+        # Clean up any numbered prefixes (e.g., "1. ", "- ", etc.)
+        import re
+        cleaned_variations = []
+        for variation in variations:
+            # Remove leading numbers, dashes, asterisks, etc.
+            cleaned = re.sub(r'^[\d\.\-\*\•\+]+\s*', '', variation)
+            if cleaned:
+                cleaned_variations.append(cleaned)
+
+        # Ensure we return requested count (or whatever we got)
+        result = cleaned_variations[:count] if len(cleaned_variations) > count else cleaned_variations
+
+        logger.info(f"[LLM METHOD] Generated {len(result)} variations from keyword '{keyword[:50]}...'")
+
+        return result
+
 
 # Global service instance
 _llm_service: LLMService | None = None
