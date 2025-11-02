@@ -845,39 +845,20 @@ export const BrainstormSession = () => {
             })()}
 
             {/* Action buttons section */}
-            <div style={{ marginTop: '1.5rem', paddingTop: '1rem', borderTop: '1px solid #e0e0e0', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-              <button
-                onClick={() => {
-                  // Trigger variation generation with the selected idea text
-                  const event = new CustomEvent('generateVariationsFromIdea', {
-                    detail: { text: selectedIdea.formatted_text }
-                  });
-                  window.dispatchEvent(event);
-                  setSelectedIdea(null);
-                }}
-                style={{
-                  background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                  color: 'white',
-                  border: 'none',
-                  padding: '0.5rem 1rem',
-                  borderRadius: '0.5rem',
-                  cursor: 'pointer',
-                  fontSize: '0.9rem',
-                  fontWeight: '600',
-                }}
-              >
-                ✨ AIでバリエーションを生成
-              </button>
-              {selectedIdea.user_id === userId ? (
+            <div style={{ marginTop: '1.5rem', paddingTop: '1rem', borderTop: '1px solid #e0e0e0', position: 'relative' }}>
+              {/* Only show variation button if variation mode is NOT enabled */}
+              {!session?.enable_variation_mode && (
                 <button
-                  onClick={async () => {
-                    if (confirm('このアイディアを削除しますか？')) {
-                      await handleDeleteIdea(selectedIdea.id);
-                      setSelectedIdea(null);
-                    }
+                  onClick={() => {
+                    // Trigger variation generation with the selected idea text
+                    const event = new CustomEvent('generateVariationsFromIdea', {
+                      detail: { text: selectedIdea.formatted_text }
+                    });
+                    window.dispatchEvent(event);
+                    setSelectedIdea(null);
                   }}
                   style={{
-                    background: '#ff4444',
+                    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
                     color: 'white',
                     border: 'none',
                     padding: '0.5rem 1rem',
@@ -887,41 +868,55 @@ export const BrainstormSession = () => {
                     fontWeight: '600',
                   }}
                 >
-                  削除
+                  ✨ AIでバリエーションを生成
+                </button>
+              )}
+
+              {/* Delete button - positioned at bottom right, small and subtle */}
+              {selectedIdea.user_id === userId ? (
+                <button
+                  onClick={async () => {
+                    if (confirm('このアイディアを削除しますか？')) {
+                      await handleDeleteIdea(selectedIdea.id);
+                      setSelectedIdea(null);
+                    }
+                  }}
+                  style={{
+                    position: 'absolute',
+                    bottom: 0,
+                    right: 0,
+                    background: 'transparent',
+                    color: '#999',
+                    border: 'none',
+                    padding: '0.25rem 0.5rem',
+                    cursor: 'pointer',
+                    fontSize: '0.75rem',
+                  }}
+                >
+                  delete
                 </button>
               ) : (
                 <button
-                  onMouseDown={(e) => {
-                    const startTime = Date.now();
-                    const checkLongPress = setInterval(() => {
-                      const elapsed = Date.now() - startTime;
-                      if (elapsed >= 5000) {
-                        clearInterval(checkLongPress);
-                        const password = prompt('管理者パスワードを入力してください:');
-                        if (password) {
-                          handleDeleteIdea(selectedIdea.id, password);
-                          setSelectedIdea(null);
-                        }
-                      }
-                    }, 100);
-
-                    const cleanup = () => {
-                      clearInterval(checkLongPress);
-                      window.removeEventListener('mouseup', cleanup);
-                    };
-                    window.addEventListener('mouseup', cleanup);
+                  onClick={async () => {
+                    const password = prompt('管理者パスワードを入力してください:');
+                    if (password) {
+                      await handleDeleteIdea(selectedIdea.id, password);
+                      setSelectedIdea(null);
+                    }
                   }}
                   style={{
-                    background: '#999',
-                    color: 'white',
+                    position: 'absolute',
+                    bottom: 0,
+                    right: 0,
+                    background: 'transparent',
+                    color: '#999',
                     border: 'none',
-                    padding: '0.5rem 1rem',
-                    borderRadius: '0.5rem',
+                    padding: '0.25rem 0.5rem',
                     cursor: 'pointer',
-                    fontSize: '0.9rem',
+                    fontSize: '0.75rem',
                   }}
                 >
-                  長押し（5秒）で管理者削除
+                  delete
                 </button>
               )}
             </div>
