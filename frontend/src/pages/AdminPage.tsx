@@ -271,6 +271,20 @@ export const AdminPage = () => {
   };
 
   const handleCreateTestSession = async () => {
+    // Show confirmation dialog
+    const confirmed = window.confirm(
+      'デバッグ用のテストセッションを作成しますか？\n\n' +
+      '以下のデータが自動生成されます：\n' +
+      '- セッション: "テストセッション"\n' +
+      '- ユーザー: 10名\n' +
+      '- アイデア: 50件\n' +
+      '- クラスター分析済み'
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
     setError(null);
     setIsLoading(true);
 
