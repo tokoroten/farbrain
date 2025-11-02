@@ -50,6 +50,7 @@ class OpenAIProvider:
         system_prompt: str | None = None,
         temperature: float = 0.7,
         max_tokens: int = 500,
+        response_format: dict | None = None,
     ) -> str:
         """
         Generate text using OpenAI API.
@@ -59,9 +60,10 @@ class OpenAIProvider:
             system_prompt: System instruction
             temperature: Sampling temperature (0-2)
             max_tokens: Maximum tokens to generate
+            response_format: Optional JSON schema for structured output
 
         Returns:
-            Generated text
+            Generated text (or JSON string if response_format is provided)
 
         Raises:
             httpx.HTTPError: If API request fails
@@ -74,11 +76,22 @@ class OpenAIProvider:
         messages.append({"role": "user", "content": prompt})
 
         # Log LLM request
-        logger.info(f"[LLM REQUEST] Model: {self.model}, Temperature: {temperature}")
+        logger.info(f"[LLM REQUEST] Model: {self.model}, Temperature: {temperature}, Structured: {response_format is not None}")
         logger.info(f"[LLM REQUEST] System prompt: {system_prompt[:100] if system_prompt else 'None'}...")
         logger.info(f"[LLM REQUEST] User prompt: {prompt[:200]}...")
 
         start_time = time.time()
+
+        request_body = {
+            "model": self.model,
+            "messages": messages,
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+        }
+
+        # Add response_format for structured output
+        if response_format:
+            request_body["response_format"] = response_format
 
         async with httpx.AsyncClient() as client:
             response = await client.post(
@@ -87,12 +100,7 @@ class OpenAIProvider:
                     "Authorization": f"Bearer {self.api_key}",
                     "Content-Type": "application/json",
                 },
-                json={
-                    "model": self.model,
-                    "messages": messages,
-                    "temperature": temperature,
-                    "max_tokens": max_tokens,
-                },
+                json=request_body,
                 timeout=30.0,
             )
 
@@ -220,7 +228,7 @@ class LLMService:
         similar_ideas: list[str] | None = None,
     ) -> str:
         """
-        Format raw user input into structured idea.
+        Format raw user input into structured idea using Structured Output.
 
         Args:
             raw_text: User's raw input
@@ -272,13 +280,43 @@ class LLMService:
 
 上記の類似アイデアとは異なる角度・切り口で整形し、新しい視点を加えてください。"""
 
-        formatted_text = await self.provider.generate(
+        # Define JSON schema for structured output
+        response_format = {
+            "type": "json_schema",
+            "json_schema": {
+                "name": "formatted_idea",
+                "strict": True,
+                "schema": {
+                    "type": "object",
+                    "properties": {
+                        "formatted_text": {
+                            "type": "string",
+                            "description": "The formatted idea text (1-2 sentences, concise and specific)"
+                        }
+                    },
+                    "required": ["formatted_text"],
+                    "additionalProperties": False
+                }
+            }
+        }
+
+        response = await self.provider.generate(
             prompt,
             system_prompt=system_prompt,
-            temperature=0.7
+            temperature=0.7,
+            response_format=response_format,
         )
 
-        return formatted_text
+        # Parse JSON response
+        import json
+        try:
+            data = json.loads(response)
+            formatted_text = data.get("formatted_text", "")
+            return formatted_text
+        except json.JSONDecodeError as e:
+            logger.error(f"[LLM METHOD] Failed to parse JSON response: {e}")
+            logger.error(f"[LLM METHOD] Raw response: {response}")
+            raise ValueError(f"Failed to parse LLM response as JSON: {e}")
 
     async def deepen_idea(
         self,
@@ -340,7 +378,7 @@ class LLMService:
         session_context: str | None = None,
     ) -> str:
         """
-        Generate label for cluster from sample ideas.
+        Generate label for cluster from sample ideas using Structured Output.
 
         Args:
             sample_ideas: List of formatted idea texts from cluster
@@ -387,13 +425,47 @@ class LLMService:
         # Log the final prompt for debugging
         logger.info(f"[LLM METHOD] Cluster summarization prompt (first 200 chars): {prompt[:200]}...")
 
-        label = await self.provider.generate(prompt, temperature=0.1)
+        # Define JSON schema for structured output
+        response_format = {
+            "type": "json_schema",
+            "json_schema": {
+                "name": "cluster_label",
+                "strict": True,
+                "schema": {
+                    "type": "object",
+                    "properties": {
+                        "label": {
+                            "type": "string",
+                            "description": "A concise cluster label (1-3 words) summarizing the common theme"
+                        }
+                    },
+                    "required": ["label"],
+                    "additionalProperties": False
+                }
+            }
+        }
 
-        # Ensure label is concise (fallback)
-        if len(label) > 50:
-            label = label[:50].rsplit(" ", 1)[0] + "..."
+        response = await self.provider.generate(
+            prompt,
+            temperature=0.1,
+            response_format=response_format,
+        )
 
-        return label
+        # Parse JSON response
+        import json
+        try:
+            data = json.loads(response)
+            label = data.get("label", "")
+
+            # Ensure label is concise (fallback)
+            if len(label) > 50:
+                label = label[:50].rsplit(" ", 1)[0] + "..."
+
+            return label
+        except json.JSONDecodeError as e:
+            logger.error(f"[LLM METHOD] Failed to parse JSON response: {e}")
+            logger.error(f"[LLM METHOD] Raw response: {response}")
+            raise ValueError(f"Failed to parse LLM response as JSON: {e}")
 
     async def synthesize_idea_from_conversation(
         self,
@@ -401,7 +473,7 @@ class LLMService:
         session_context: str | None = None,
     ) -> str:
         """
-        Synthesize an idea from conversation history.
+        Synthesize an idea from conversation history using Structured Output.
 
         Args:
             conversation_history: List of conversation messages
@@ -432,8 +504,7 @@ class LLMService:
 アイデア抽出の原則:
 - 対話全体から本質的なアイデアを抽出する
 - 具体的で実現可能な表現にする
-- 1-2文で簡潔にまとめる
-- 抽出したアイデアのみを出力する（説明や前置きは不要）"""
+- 1-2文で簡潔にまとめる"""
 
         # Add session context if available
         if session_context:
@@ -443,17 +514,44 @@ class LLMService:
 
 {conversation_text}"""
 
-        idea = await self.provider.generate(
+        # Define JSON schema for structured output
+        response_format = {
+            "type": "json_schema",
+            "json_schema": {
+                "name": "synthesized_idea",
+                "strict": True,
+                "schema": {
+                    "type": "object",
+                    "properties": {
+                        "idea": {
+                            "type": "string",
+                            "description": "The synthesized idea extracted from the conversation (1-2 sentences)"
+                        }
+                    },
+                    "required": ["idea"],
+                    "additionalProperties": False
+                }
+            }
+        }
+
+        response = await self.provider.generate(
             prompt,
             system_prompt=system_prompt,
             temperature=0.7,
             max_tokens=200,
+            response_format=response_format,
         )
 
-        # Clean up the response
-        idea = idea.strip()
-
-        return idea
+        # Parse JSON response
+        import json
+        try:
+            data = json.loads(response)
+            idea = data.get("idea", "")
+            return idea
+        except json.JSONDecodeError as e:
+            logger.error(f"[LLM METHOD] Failed to parse JSON response: {e}")
+            logger.error(f"[LLM METHOD] Raw response: {response}")
+            raise ValueError(f"Failed to parse LLM response as JSON: {e}")
 
     async def generate_variations(
         self,
@@ -462,7 +560,7 @@ class LLMService:
         count: int = 10,
     ) -> list[str]:
         """
-        Generate variations of an idea keyword.
+        Generate variations of an idea keyword using Structured Output.
 
         Args:
             keyword: Base keyword/idea to generate variations from
@@ -489,8 +587,7 @@ class LLMService:
 - 元のアイデアの本質を保ちながら、異なる角度から発展させる
 - 具体性を高める、抽象度を上げる、適用領域を変える、など多様な変化を加える
 - 各バリエーションは簡潔に1-2文で表現する
-- 実現可能性を考慮しつつ、創造的であること
-- 各バリエーションは1行ずつ箇条書きで出力する（番号や記号は不要）"""
+- 実現可能性を考慮しつつ、創造的であること"""
 
         # Add session context if available
         if session_context:
@@ -510,38 +607,51 @@ class LLMService:
 - 時間軸を変える（短期/長期）
 - 組み合わせる（他の要素と統合）
 
-各バリエーションを1行ずつ出力してください（番号や記号は不要）。
 できるだけ重複や類似を避け、多様な視点から生成してください。"""
+
+        # Define JSON schema for structured output
+        response_format = {
+            "type": "json_schema",
+            "json_schema": {
+                "name": "idea_variations",
+                "strict": True,
+                "schema": {
+                    "type": "object",
+                    "properties": {
+                        "variations": {
+                            "type": "array",
+                            "items": {
+                                "type": "string",
+                                "description": "A variation of the original idea"
+                            },
+                            "description": f"List of {count} creative variations"
+                        }
+                    },
+                    "required": ["variations"],
+                    "additionalProperties": False
+                }
+            }
+        }
 
         response = await self.provider.generate(
             prompt,
             system_prompt=system_prompt,
             temperature=0.9,  # Higher temperature for more creativity
             max_tokens=800,
+            response_format=response_format,
         )
 
-        # Parse variations from response (split by newlines, filter empty lines)
-        variations = [
-            line.strip()
-            for line in response.strip().split('\n')
-            if line.strip() and not line.strip().startswith('#')
-        ]
-
-        # Clean up any numbered prefixes (e.g., "1. ", "- ", etc.)
-        import re
-        cleaned_variations = []
-        for variation in variations:
-            # Remove leading numbers, dashes, asterisks, etc.
-            cleaned = re.sub(r'^[\d\.\-\*\•\+]+\s*', '', variation)
-            if cleaned:
-                cleaned_variations.append(cleaned)
-
-        # Ensure we return requested count (or whatever we got)
-        result = cleaned_variations[:count] if len(cleaned_variations) > count else cleaned_variations
-
-        logger.info(f"[LLM METHOD] Generated {len(result)} variations from keyword '{keyword[:50]}...'")
-
-        return result
+        # Parse JSON response
+        import json
+        try:
+            data = json.loads(response)
+            variations = data.get("variations", [])
+            logger.info(f"[LLM METHOD] Generated {len(variations)} variations from keyword '{keyword[:50]}...'")
+            return variations[:count]  # Ensure we don't exceed requested count
+        except json.JSONDecodeError as e:
+            logger.error(f"[LLM METHOD] Failed to parse JSON response: {e}")
+            logger.error(f"[LLM METHOD] Raw response: {response}")
+            raise ValueError(f"Failed to parse LLM response as JSON: {e}")
 
 
 # Global service instance
