@@ -846,8 +846,8 @@ export const BrainstormSession = () => {
 
             {/* Action buttons section */}
             <div style={{ marginTop: '1.5rem', paddingTop: '1rem', borderTop: '1px solid #e0e0e0', position: 'relative' }}>
-              {/* Only show variation button if variation mode is NOT enabled */}
-              {!session?.enable_variation_mode && (
+              {/* Only show variation button if variation mode IS enabled */}
+              {session?.enable_variation_mode && (
                 <button
                   onClick={() => {
                     // Trigger variation generation with the selected idea text
