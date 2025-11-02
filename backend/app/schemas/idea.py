@@ -20,6 +20,10 @@ class IdeaCreate(BaseModel):
         False,
         description="Skip LLM formatting and use raw text directly"
     )
+    formatted_text: str | None = Field(
+        None,
+        description="Pre-formatted text (e.g., from variation generation). If provided, LLM formatting is skipped."
+    )
 
 
 class IdeaResponse(BaseModel):

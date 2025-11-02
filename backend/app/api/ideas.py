@@ -97,7 +97,8 @@ async def _format_and_embed_text(
     raw_text: str,
     skip_formatting: bool,
     session: Session,
-    existing_ideas: list[Idea]
+    existing_ideas: list[Idea],
+    preformatted_text: str | None = None
 ) -> tuple[str, np.ndarray]:
     """
     Format text with LLM (if needed) and generate embedding.
@@ -110,12 +111,15 @@ async def _format_and_embed_text(
         skip_formatting: Whether to skip LLM formatting
         session: Session object for context
         existing_ideas: List of existing ideas for similarity search
+        preformatted_text: Pre-formatted text (e.g., from variation generation)
 
     Returns:
         Tuple of (formatted_text, embedding_array)
     """
-    # Format with LLM if requested
-    if skip_formatting:
+    # Use pre-formatted text if provided
+    if preformatted_text:
+        formatted_text = preformatted_text
+    elif skip_formatting:
         formatted_text = raw_text
     else:
         # Generate temporary embedding from raw text to find similar ideas
@@ -244,7 +248,8 @@ async def create_idea(
         idea_data.raw_text,
         idea_data.skip_formatting,
         session,
-        existing_ideas
+        existing_ideas,
+        preformatted_text=idea_data.formatted_text
     )
     embedding_list = embedding.tolist()
 

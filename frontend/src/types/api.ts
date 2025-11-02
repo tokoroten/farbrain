@@ -83,6 +83,7 @@ export interface IdeaCreateRequest {
   user_id: string;
   raw_text: string;
   skip_formatting?: boolean;
+  formatted_text?: string;  // Pre-formatted text (e.g., from variation generation)
 }
 
 export interface IdeaListResponse {

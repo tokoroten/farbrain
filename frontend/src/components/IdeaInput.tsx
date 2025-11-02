@@ -6,7 +6,7 @@ import { useState, useRef, useEffect } from 'react';
 import { api } from '../lib/api';
 
 interface Props {
-  onSubmit: (text: string, skipFormatting?: boolean) => Promise<void>;
+  onSubmit: (text: string, skipFormatting?: boolean, formattedText?: string) => Promise<void>;
   sessionId?: string;
   enableDialogueMode?: boolean;
   enableVariationMode?: boolean;
@@ -248,9 +248,11 @@ export const IdeaInput = ({ onSubmit, sessionId, enableDialogueMode = true, enab
       }
 
       // Submit all selected variations in parallel
+      // raw_text = originalText (拡張前の原文)
+      // formatted_text = variation (拡張後のテキスト)
       submitPromises.push(
         ...Array.from(selectedVariations).map(index =>
-          onSubmit(variations[index], true) // skip_formatting = true, already formatted by LLM
+          onSubmit(originalText, false, variations[index]) // raw_text=originalText, formatted_text=variation
         )
       );
 

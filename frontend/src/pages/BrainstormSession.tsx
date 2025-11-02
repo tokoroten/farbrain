@@ -221,7 +221,7 @@ export const BrainstormSession = () => {
     }
   }
 
-  const handleIdeaSubmit = async (rawText: string, skipFormatting?: boolean) => {
+  const handleIdeaSubmit = async (rawText: string, skipFormatting?: boolean, formattedText?: string) => {
     if (!sessionId || !userId) return;
 
     try {
@@ -230,6 +230,7 @@ export const BrainstormSession = () => {
         user_id: userId,
         raw_text: rawText,
         skip_formatting: skipFormatting,
+        formatted_text: formattedText,
       });
       // Idea will be added via WebSocket
     } catch (err) {
