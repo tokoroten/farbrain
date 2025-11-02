@@ -3,17 +3,21 @@
  */
 
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useUserStore } from '../store/userStore';
 import { api } from '../lib/api';
 
 export const Home = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { userId, userName, setUser } = useUserStore();
   const [name, setName] = useState(userName || '');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [backendConnected, setBackendConnected] = useState<boolean | null>(null);
+
+  // Get intended session from location state (set by BrainstormSession redirect)
+  const intendedSessionId = location.state?.sessionId as string | undefined;
 
   // Check backend connection on mount
   useEffect(() => {
@@ -51,8 +55,12 @@ export const Home = () => {
       // Save to store
       setUser(currentUserId, name.trim());
 
-      // Navigate to session list
-      navigate('/sessions');
+      // Navigate to intended session or session list
+      if (intendedSessionId) {
+        navigate(`/session/${intendedSessionId}/join`);
+      } else {
+        navigate('/sessions');
+      }
     } catch (err) {
       console.error('Failed to register user:', err);
       setError('登録に失敗しました。もう一度お試しください。');

@@ -609,6 +609,22 @@ export const AdminPage = () => {
 
                       <div style={{ display: 'flex', gap: '0.4rem' }}>
                         <button
+                          onClick={() => navigate(`/session/${session.id}`)}
+                          style={{
+                            padding: '0.4rem 0.75rem',
+                            background: '#17a2b8',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '0.4rem',
+                            fontSize: '0.8rem',
+                            cursor: 'pointer',
+                            fontWeight: '600',
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          🚀 開く
+                        </button>
+                        <button
                           onClick={() => handleEditClick(session)}
                           style={{
                             padding: '0.4rem 0.75rem',

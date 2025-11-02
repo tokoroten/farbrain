@@ -42,6 +42,7 @@ export const BrainstormSession = () => {
   const [menuOpen, setMenuOpen] = useState(false);
   const [recentlyVotedIdeaIds, setRecentlyVotedIdeaIds] = useState<string[]>([]);
   const [filteredUserId, setFilteredUserId] = useState<string | null>(null);
+  const [filteredClusterId, setFilteredClusterId] = useState<number | null>(null);
 
   // WebSocket connection
   const { isConnected } = useWebSocket({
@@ -51,7 +52,8 @@ export const BrainstormSession = () => {
 
   useEffect(() => {
     if (!userId || !userName || !sessionId) {
-      navigate('/');
+      // Redirect to home with sessionId so user can return after login
+      navigate('/', { state: { sessionId } });
       return;
     }
 
@@ -144,6 +146,7 @@ export const BrainstormSession = () => {
       case 'clusters_recalculated':
         // Refresh only visualization data (ideas and clusters) when clusters are recalculated
         console.log('Clusters recalculated - refreshing visualization only');
+        setFilteredClusterId(null); // Clear cluster filter
         fetchVisualizationData();
         break;
 
@@ -653,6 +656,7 @@ export const BrainstormSession = () => {
               onDeleteIdea={handleDeleteIdea}
               recentlyVotedIdeaIds={recentlyVotedIdeaIds}
               filteredUserId={filteredUserId}
+              filteredClusterId={filteredClusterId}
             />
           </div>
 
@@ -664,7 +668,12 @@ export const BrainstormSession = () => {
               boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
               padding: '1rem',
             }}>
-              <IdeaInput onSubmit={handleIdeaSubmit} sessionId={sessionId} />
+              <IdeaInput
+                onSubmit={handleIdeaSubmit}
+                sessionId={sessionId}
+                enableDialogueMode={session?.enable_dialogue_mode ?? true}
+                enableVariationMode={session?.enable_variation_mode ?? true}
+              />
             </div>
           )}
 
@@ -703,6 +712,7 @@ export const BrainstormSession = () => {
             onVoteIdea={handleVoteIdea}
             onUnvoteIdea={handleUnvoteIdea}
             onUserFilterChange={setFilteredUserId}
+            onClusterFilterChange={setFilteredClusterId}
           />
         </div>
       </div>
@@ -834,8 +844,30 @@ export const BrainstormSession = () => {
               ) : null;
             })()}
 
-            {/* Delete button section */}
-            <div style={{ marginTop: '1.5rem', paddingTop: '1rem', borderTop: '1px solid #e0e0e0' }}>
+            {/* Action buttons section */}
+            <div style={{ marginTop: '1.5rem', paddingTop: '1rem', borderTop: '1px solid #e0e0e0', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+              <button
+                onClick={() => {
+                  // Trigger variation generation with the selected idea text
+                  const event = new CustomEvent('generateVariationsFromIdea', {
+                    detail: { text: selectedIdea.formatted_text }
+                  });
+                  window.dispatchEvent(event);
+                  setSelectedIdea(null);
+                }}
+                style={{
+                  background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                  color: 'white',
+                  border: 'none',
+                  padding: '0.5rem 1rem',
+                  borderRadius: '0.5rem',
+                  cursor: 'pointer',
+                  fontSize: '0.9rem',
+                  fontWeight: '600',
+                }}
+              >
+                ✨ AIでバリエーションを生成
+              </button>
               {selectedIdea.user_id === userId ? (
                 <button
                   onClick={async () => {
