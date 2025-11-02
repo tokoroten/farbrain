@@ -1,24 +1,78 @@
 /**
- * Idea input component with dialogue mode
+ * Idea input component with dialogue mode and variation mode
  */
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
+import { api } from '../lib/api';
 
 interface Props {
   onSubmit: (text: string, skipFormatting?: boolean) => Promise<void>;
   sessionId?: string;
+  enableDialogueMode?: boolean;
+  enableVariationMode?: boolean;
 }
 
-export const IdeaInput = ({ onSubmit, sessionId }: Props) => {
+type InputMode = 'direct' | 'dialogue' | 'variation';
+
+export const IdeaInput = ({ onSubmit, sessionId, enableDialogueMode = true, enableVariationMode = true }: Props) => {
   const [text, setText] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [dialogueMode, setDialogueMode] = useState(false);
+  const [inputMode, setInputMode] = useState<InputMode>('direct');
   const [skipFormatting, setSkipFormatting] = useState(true);
   const [conversationHistory, setConversationHistory] = useState<Array<{ role: string; content: string }>>([]);
   const [aiResponse, setAiResponse] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
+  const [variations, setVariations] = useState<string[]>([]);
+  const [selectedVariations, setSelectedVariations] = useState<Set<number>>(new Set());
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [originalText, setOriginalText] = useState<string>(''); // Store user's original input
+  const [isOriginalSelected, setIsOriginalSelected] = useState(false); // Track if original text is selected
+  const [isFromExistingIdea, setIsFromExistingIdea] = useState(false); // Track if variations are from existing idea
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Listen for external variation generation requests
+  useEffect(() => {
+    const handleGenerateVariations = async (event: Event) => {
+      const customEvent = event as CustomEvent<{ text: string }>;
+      const ideaText = customEvent.detail.text;
+
+      // Switch to variation mode and set the text
+      setInputMode('variation');
+      setText(ideaText);
+      setConversationHistory([]);
+      setAiResponse('');
+
+      // Automatically generate variations
+      setIsGenerating(true);
+      setError(null);
+      setVariations([]);
+      setSelectedVariations(new Set());
+      setOriginalText(ideaText);
+      setIsOriginalSelected(false);
+      setIsFromExistingIdea(true); // Mark as from existing idea
+
+      try {
+        const response = await api.dialogue.generateVariations({
+          keyword: ideaText,
+          session_id: sessionId,
+          count: 10,
+        });
+
+        setVariations(response.variations);
+      } catch (err) {
+        console.error('Failed to generate variations:', err);
+        setError('バリエーションの生成に失敗しました');
+      } finally {
+        setIsGenerating(false);
+      }
+    };
+
+    window.addEventListener('generateVariationsFromIdea', handleGenerateVariations);
+    return () => {
+      window.removeEventListener('generateVariationsFromIdea', handleGenerateVariations);
+    };
+  }, [sessionId]);
 
   const handleDialogueContinue = async () => {
     if (!text.trim()) {
@@ -124,13 +178,95 @@ export const IdeaInput = ({ onSubmit, sessionId }: Props) => {
       await onSubmit(data.formatted_idea);
 
       // Reset dialogue mode
-      setDialogueMode(false);
+      setInputMode('direct');
       setConversationHistory([]);
       setAiResponse('');
       setText('');
     } catch (err) {
       console.error('Failed to finalize idea:', err);
       setError('アイディアの確定に失敗しました');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleGenerateVariations = async () => {
+    if (!text.trim()) {
+      setError('キーワードを入力してください');
+      return;
+    }
+
+    setIsGenerating(true);
+    setError(null);
+    setVariations([]);
+    setSelectedVariations(new Set());
+    setOriginalText(text.trim()); // Save the original user input
+    setIsOriginalSelected(false); // Reset original selection
+    setIsFromExistingIdea(false); // Not from existing idea
+
+    try {
+      const response = await api.dialogue.generateVariations({
+        keyword: text.trim(),
+        session_id: sessionId,
+        count: 10,
+      });
+
+      setVariations(response.variations);
+    } catch (err) {
+      console.error('Failed to generate variations:', err);
+      setError('バリエーションの生成に失敗しました');
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const handleToggleVariation = (index: number) => {
+    const newSelected = new Set(selectedVariations);
+    if (newSelected.has(index)) {
+      newSelected.delete(index);
+    } else {
+      newSelected.add(index);
+    }
+    setSelectedVariations(newSelected);
+  };
+
+  const handleSubmitVariations = async () => {
+    if (selectedVariations.size === 0 && !isOriginalSelected) {
+      setError('少なくとも1つのアイディアを選択してください');
+      return;
+    }
+
+    setIsSubmitting(true);
+    setError(null);
+
+    try {
+      const submitPromises = [];
+
+      // Submit original text if selected
+      if (isOriginalSelected && originalText) {
+        submitPromises.push(onSubmit(originalText, true)); // skip_formatting = true
+      }
+
+      // Submit all selected variations in parallel
+      submitPromises.push(
+        ...Array.from(selectedVariations).map(index =>
+          onSubmit(variations[index], true) // skip_formatting = true, already formatted by LLM
+        )
+      );
+
+      await Promise.all(submitPromises);
+
+      // Reset variation data but stay in variation mode
+      setText('');
+      setVariations([]);
+      setSelectedVariations(new Set());
+      setOriginalText(''); // Clear original text
+      setIsOriginalSelected(false); // Clear original selection
+      setIsFromExistingIdea(false); // Clear existing idea flag
+      // Keep inputMode as 'variation'
+    } catch (err) {
+      console.error('Failed to submit variations:', err);
+      setError('アイディアの投稿に失敗しました');
     } finally {
       setIsSubmitting(false);
     }
@@ -150,9 +286,12 @@ export const IdeaInput = ({ onSubmit, sessionId }: Props) => {
       return;
     }
 
-    if (dialogueMode) {
+    if (inputMode === 'dialogue') {
       // In dialogue mode, continue conversation
       await handleDialogueContinue();
+    } else if (inputMode === 'variation') {
+      // In variation mode, generate variations
+      await handleGenerateVariations();
     } else {
       // Direct submission - optimistic UI
       const ideaText = text.trim();
@@ -176,20 +315,26 @@ export const IdeaInput = ({ onSubmit, sessionId }: Props) => {
 
   return (
     <form onSubmit={handleSubmit}>
-      {/* Mode toggle */}
+      {/* Mode toggle - only show if at least one AI mode is enabled */}
+      {(enableDialogueMode || enableVariationMode) && (
       <div style={{ marginBottom: '0.75rem', display: 'flex', gap: '0.5rem' }}>
         <button
           type="button"
           onClick={() => {
-            setDialogueMode(false);
+            setInputMode('direct');
             setConversationHistory([]);
             setAiResponse('');
+            setVariations([]);
+            setSelectedVariations(new Set());
+            setOriginalText('');
+            setIsOriginalSelected(false);
+            setIsFromExistingIdea(false);
           }}
           style={{
             flex: 1,
             padding: '0.5rem',
-            background: !dialogueMode ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' : '#f0f0f0',
-            color: !dialogueMode ? 'white' : '#666',
+            background: inputMode === 'direct' ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' : '#f0f0f0',
+            color: inputMode === 'direct' ? 'white' : '#666',
             border: 'none',
             borderRadius: '0.5rem',
             fontSize: '0.875rem',
@@ -199,27 +344,169 @@ export const IdeaInput = ({ onSubmit, sessionId }: Props) => {
         >
           直接投稿
         </button>
-        <button
-          type="button"
-          onClick={() => setDialogueMode(true)}
-          style={{
-            flex: 1,
-            padding: '0.5rem',
-            background: dialogueMode ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' : '#f0f0f0',
-            color: dialogueMode ? 'white' : '#666',
-            border: 'none',
-            borderRadius: '0.5rem',
-            fontSize: '0.875rem',
-            fontWeight: '600',
-            cursor: 'pointer',
-          }}
-        >
-          💬 AI対話モード
-        </button>
+        {enableDialogueMode && (
+          <button
+            type="button"
+            onClick={() => {
+              setInputMode('dialogue');
+              setVariations([]);
+              setSelectedVariations(new Set());
+              setOriginalText('');
+              setIsOriginalSelected(false);
+              setIsFromExistingIdea(false);
+            }}
+            style={{
+              flex: 1,
+              padding: '0.5rem',
+              background: inputMode === 'dialogue' ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' : '#f0f0f0',
+              color: inputMode === 'dialogue' ? 'white' : '#666',
+              border: 'none',
+              borderRadius: '0.5rem',
+              fontSize: '0.875rem',
+              fontWeight: '600',
+              cursor: 'pointer',
+            }}
+          >
+            💬 AI対話
+          </button>
+        )}
+        {enableVariationMode && (
+          <button
+            type="button"
+            onClick={() => {
+              setInputMode('variation');
+              setConversationHistory([]);
+              setAiResponse('');
+            }}
+            style={{
+              flex: 1,
+              padding: '0.5rem',
+              background: inputMode === 'variation' ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' : '#f0f0f0',
+              color: inputMode === 'variation' ? 'white' : '#666',
+              border: 'none',
+              borderRadius: '0.5rem',
+              fontSize: '0.875rem',
+              fontWeight: '600',
+              cursor: 'pointer',
+            }}
+          >
+            ✨ AIバリエーション
+          </button>
+        )}
       </div>
+      )}
+
+      {/* Variations display */}
+      {inputMode === 'variation' && variations.length > 0 && (
+        <div style={{
+          marginBottom: '0.75rem',
+          border: '1px solid #e0e0e0',
+          borderRadius: '0.5rem',
+          padding: '0.75rem',
+          background: '#fafafa',
+        }}>
+          <div style={{ fontWeight: '600', marginBottom: '0.5rem', fontSize: '0.95rem' }}>
+            生成されたアイディア（選択して投稿）:
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+            {/* Display original text first with checkbox */}
+            {originalText && (
+              <label
+                style={{
+                  display: 'flex',
+                  alignItems: 'start',
+                  gap: '0.5rem',
+                  padding: '0.5rem',
+                  background: isFromExistingIdea ? '#f5f5f5' : (isOriginalSelected ? '#fff3cd' : '#fff9e6'),
+                  border: `2px solid ${isFromExistingIdea ? '#ccc' : (isOriginalSelected ? '#ffc107' : '#ffd700')}`,
+                  borderRadius: '0.5rem',
+                  cursor: isFromExistingIdea ? 'not-allowed' : 'pointer',
+                  transition: 'all 0.2s',
+                  opacity: isFromExistingIdea ? 0.6 : 1,
+                }}
+                onMouseEnter={(e) => {
+                  if (!isOriginalSelected && !isFromExistingIdea) {
+                    e.currentTarget.style.borderColor = '#ffb300';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (!isOriginalSelected && !isFromExistingIdea) {
+                    e.currentTarget.style.borderColor = '#ffd700';
+                  }
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={isOriginalSelected}
+                  onChange={() => !isFromExistingIdea && setIsOriginalSelected(!isOriginalSelected)}
+                  disabled={isFromExistingIdea}
+                  style={{
+                    width: '18px',
+                    height: '18px',
+                    marginTop: '2px',
+                    cursor: isFromExistingIdea ? 'not-allowed' : 'pointer',
+                    flexShrink: 0,
+                  }}
+                />
+                <div style={{ fontSize: '0.875rem', lineHeight: '1.4' }}>
+                  <div style={{ fontWeight: '600', marginBottom: '0.25rem', color: isFromExistingIdea ? '#999' : '#856404' }}>
+                    📝 原文: {isFromExistingIdea && <span style={{ fontSize: '0.75rem', fontWeight: 'normal' }}>(既に投稿済み)</span>}
+                  </div>
+                  <div style={{ color: isFromExistingIdea ? '#999' : 'inherit' }}>{originalText}</div>
+                </div>
+              </label>
+            )}
+            {variations.map((variation, index) => (
+              <label
+                key={index}
+                style={{
+                  display: 'flex',
+                  alignItems: 'start',
+                  gap: '0.5rem',
+                  padding: '0.5rem',
+                  background: selectedVariations.has(index) ? '#e3f2fd' : 'white',
+                  border: `2px solid ${selectedVariations.has(index) ? '#667eea' : '#e0e0e0'}`,
+                  borderRadius: '0.5rem',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                }}
+                onMouseEnter={(e) => {
+                  if (!selectedVariations.has(index)) {
+                    e.currentTarget.style.borderColor = '#bbb';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (!selectedVariations.has(index)) {
+                    e.currentTarget.style.borderColor = '#e0e0e0';
+                  }
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={selectedVariations.has(index)}
+                  onChange={() => handleToggleVariation(index)}
+                  style={{
+                    width: '18px',
+                    height: '18px',
+                    marginTop: '2px',
+                    cursor: 'pointer',
+                    flexShrink: 0,
+                  }}
+                />
+                <span style={{ fontSize: '0.875rem', lineHeight: '1.4' }}>
+                  {variation}
+                </span>
+              </label>
+            ))}
+          </div>
+          <div style={{ marginTop: '0.5rem', fontSize: '0.875rem', color: '#666' }}>
+            {selectedVariations.size + (isOriginalSelected ? 1 : 0)}個のアイディアを選択中
+          </div>
+        </div>
+      )}
 
       {/* Conversation history */}
-      {dialogueMode && conversationHistory.length > 0 && (
+      {inputMode === 'dialogue' && conversationHistory.length > 0 && (
         <div style={{
           marginBottom: '0.75rem',
           maxHeight: '300px',
@@ -267,7 +554,13 @@ export const IdeaInput = ({ onSubmit, sessionId }: Props) => {
           fontWeight: '600',
           fontSize: '0.95rem',
         }}>
-          💡 {dialogueMode ? 'AIと対話しながらアイディアを深める' : '新しいアイディアを投稿'}
+          💡 {
+            inputMode === 'dialogue'
+              ? 'AIと対話しながらアイディアを深める'
+              : inputMode === 'variation'
+                ? 'キーワードから複数のアイディアを生成'
+                : '新しいアイディアを投稿'
+          }
         </label>
         <textarea
           ref={textareaRef}
@@ -280,8 +573,12 @@ export const IdeaInput = ({ onSubmit, sessionId }: Props) => {
               handleSubmit(e as any);
             }
           }}
-          placeholder="あなたのアイディアを入力してください..."
-          rows={3}
+          placeholder={
+            inputMode === 'variation'
+              ? 'キーワードを入力してください（例: 環境問題、リモートワーク）'
+              : 'あなたのアイディアを入力してください...'
+          }
+          rows={inputMode === 'variation' ? 2 : 3}
           maxLength={2000}
           style={{
             width: '100%',
@@ -305,11 +602,13 @@ export const IdeaInput = ({ onSubmit, sessionId }: Props) => {
           color: '#666',
         }}>
           <span>
-            {dialogueMode
+            {inputMode === 'dialogue'
               ? 'AIと対話しながらアイディアを磨きます'
-              : skipFormatting
-                ? '入力したアイディアをそのまま可視化します'
-                : 'AIがアイディアをブラッシュアップして可視化します'
+              : inputMode === 'variation'
+                ? 'AIが10種類のバリエーションを生成します'
+                : skipFormatting
+                  ? '入力したアイディアをそのまま可視化します'
+                  : 'AIがアイディアをブラッシュアップして可視化します'
             }
           </span>
           <span>
@@ -319,7 +618,7 @@ export const IdeaInput = ({ onSubmit, sessionId }: Props) => {
       </div>
 
       {/* LLM Formatting checkbox (only in direct mode) */}
-      {!dialogueMode && (
+      {inputMode === 'direct' && (
         <div style={{ marginBottom: '0.75rem' }}>
           <label style={{
             display: 'flex',
@@ -361,7 +660,8 @@ export const IdeaInput = ({ onSubmit, sessionId }: Props) => {
         </div>
       )}
 
-      {dialogueMode ? (
+      {/* Submit buttons based on mode */}
+      {inputMode === 'dialogue' ? (
         <div style={{ display: 'flex', gap: '0.5rem' }}>
           <button
             type="submit"
@@ -402,6 +702,50 @@ export const IdeaInput = ({ onSubmit, sessionId }: Props) => {
               }}
             >
               {isSubmitting ? '投稿中...' : '✓ 投稿する'}
+            </button>
+          )}
+        </div>
+      ) : inputMode === 'variation' ? (
+        <div style={{ display: 'flex', gap: '0.5rem' }}>
+          <button
+            type="submit"
+            disabled={isGenerating || !text.trim() || variations.length > 0}
+            style={{
+              flex: 1,
+              padding: '0.75rem',
+              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+              color: 'white',
+              border: 'none',
+              borderRadius: '0.5rem',
+              fontSize: '1rem',
+              fontWeight: '600',
+              cursor: isGenerating || !text.trim() || variations.length > 0 ? 'not-allowed' : 'pointer',
+              opacity: isGenerating || !text.trim() || variations.length > 0 ? 0.6 : 1,
+              transition: 'opacity 0.2s',
+            }}
+          >
+            {isGenerating ? '生成中...' : '✨ バリエーション生成'}
+          </button>
+          {variations.length > 0 && (
+            <button
+              type="button"
+              onClick={handleSubmitVariations}
+              disabled={isSubmitting || selectedVariations.size === 0}
+              style={{
+                flex: 1,
+                padding: '0.75rem',
+                background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
+                color: 'white',
+                border: 'none',
+                borderRadius: '0.5rem',
+                fontSize: '1rem',
+                fontWeight: '600',
+                cursor: isSubmitting || selectedVariations.size === 0 ? 'not-allowed' : 'pointer',
+                opacity: isSubmitting || selectedVariations.size === 0 ? 0.6 : 1,
+                transition: 'opacity 0.2s',
+              }}
+            >
+              {isSubmitting ? '投稿中...' : `✓ ${selectedVariations.size}個を投稿`}
             </button>
           )}
         </div>

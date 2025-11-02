@@ -73,6 +73,10 @@ def _to_session_response(
     Returns:
         SessionResponse object
     """
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info(f"[SESSION-RESPONSE] Session {session.id}: enable_dialogue_mode={session.enable_dialogue_mode}, enable_variation_mode={session.enable_variation_mode}")
+
     return SessionResponse(
         id=session.id,
         title=session.title,
@@ -85,6 +89,8 @@ def _to_session_response(
         idea_count=idea_count,
         formatting_prompt=session.formatting_prompt,
         summarization_prompt=session.summarization_prompt,
+        enable_dialogue_mode=session.enable_dialogue_mode,
+        enable_variation_mode=session.enable_variation_mode,
         created_at=session.created_at,
     )
 
@@ -203,6 +209,16 @@ async def update_session(
         session.formatting_prompt = session_update.formatting_prompt
     if session_update.summarization_prompt is not None:
         session.summarization_prompt = session_update.summarization_prompt
+    if session_update.enable_dialogue_mode is not None:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info(f"[UPDATE] Updating enable_dialogue_mode from {session.enable_dialogue_mode} to {session_update.enable_dialogue_mode}")
+        session.enable_dialogue_mode = session_update.enable_dialogue_mode
+    if session_update.enable_variation_mode is not None:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info(f"[UPDATE] Updating enable_variation_mode from {session.enable_variation_mode} to {session_update.enable_variation_mode}")
+        session.enable_variation_mode = session_update.enable_variation_mode
 
     await db.commit()
     await db.refresh(session)

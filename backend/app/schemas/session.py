@@ -32,6 +32,14 @@ class SessionCreate(BaseModel):
         max_length=2000,
         description="Custom prompt for cluster summarization"
     )
+    enable_dialogue_mode: bool = Field(
+        default=True,
+        description="Enable AI dialogue mode for participants"
+    )
+    enable_variation_mode: bool = Field(
+        default=True,
+        description="Enable AI variation mode for participants"
+    )
 
 
 class SessionUpdate(BaseModel):
@@ -43,6 +51,8 @@ class SessionUpdate(BaseModel):
     accepting_ideas: bool | None = None
     formatting_prompt: str | None = Field(default=None, max_length=2000)
     summarization_prompt: str | None = Field(default=None, max_length=2000)
+    enable_dialogue_mode: bool | None = None
+    enable_variation_mode: bool | None = None
 
 
 class SessionResponse(BaseModel):
@@ -59,6 +69,8 @@ class SessionResponse(BaseModel):
     idea_count: int = Field(default=0, description="Number of ideas")
     formatting_prompt: str | None = Field(None, description="Custom formatting prompt")
     summarization_prompt: str | None = Field(None, description="Custom summarization prompt")
+    enable_dialogue_mode: bool = Field(default=True, description="AI dialogue mode enabled")
+    enable_variation_mode: bool = Field(default=True, description="AI variation mode enabled")
     created_at: datetime = Field(..., description="Creation timestamp")
 
     model_config = {"from_attributes": True}

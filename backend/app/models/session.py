@@ -64,6 +64,8 @@ class Session(Base):
     formatting_prompt: Mapped[str | None] = mapped_column(Text, nullable=True)
     summarization_prompt: Mapped[str | None] = mapped_column(Text, nullable=True)
     fixed_cluster_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    enable_dialogue_mode: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    enable_variation_mode: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime,
         nullable=False,

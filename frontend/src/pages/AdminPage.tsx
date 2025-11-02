@@ -46,6 +46,8 @@ export const AdminPage = () => {
     password: '',
     formatting_prompt: '',
     summarization_prompt: '',
+    enable_dialogue_mode: true,
+    enable_variation_mode: true,
   });
   const [isSaving, setIsSaving] = useState(false);
 
@@ -55,6 +57,8 @@ export const AdminPage = () => {
     password: '',
     formatting_prompt: DEFAULT_FORMATTING_PROMPT,
     summarization_prompt: DEFAULT_SUMMARIZATION_PROMPT,
+    enable_dialogue_mode: true,
+    enable_variation_mode: true,
   });
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -119,6 +123,12 @@ export const AdminPage = () => {
   };
 
   const handleEditClick = (session: Session) => {
+    console.log('[EDIT] Session data:', {
+      id: session.id,
+      title: session.title,
+      enable_dialogue_mode: session.enable_dialogue_mode,
+      enable_variation_mode: session.enable_variation_mode,
+    });
     setEditingSession(session);
     setEditForm({
       title: session.title,
@@ -126,6 +136,8 @@ export const AdminPage = () => {
       password: '',
       formatting_prompt: session.formatting_prompt || '',
       summarization_prompt: session.summarization_prompt || '',
+      enable_dialogue_mode: session.enable_dialogue_mode,
+      enable_variation_mode: session.enable_variation_mode,
     });
   };
 
@@ -176,6 +188,8 @@ export const AdminPage = () => {
       if (editForm.password.trim()) updateData.password = editForm.password.trim();
       if (editForm.formatting_prompt.trim()) updateData.formatting_prompt = editForm.formatting_prompt.trim();
       if (editForm.summarization_prompt.trim()) updateData.summarization_prompt = editForm.summarization_prompt.trim();
+      updateData.enable_dialogue_mode = editForm.enable_dialogue_mode;
+      updateData.enable_variation_mode = editForm.enable_variation_mode;
 
       await api.sessions.update(editingSession.id, updateData);
       await fetchSessions();
@@ -228,6 +242,8 @@ export const AdminPage = () => {
         password: formData.password || undefined,
         formatting_prompt: formData.formatting_prompt || undefined,
         summarization_prompt: formData.summarization_prompt || undefined,
+        enable_dialogue_mode: formData.enable_dialogue_mode,
+        enable_variation_mode: formData.enable_variation_mode,
       });
 
       // Navigate to the session
@@ -891,6 +907,60 @@ export const AdminPage = () => {
                     />
                   </div>
 
+                  <div style={{ marginBottom: '1rem' }}>
+                    <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '600', fontSize: '0.9rem' }}>
+                      AI機能設定
+                    </label>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                      <label style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.4rem',
+                        cursor: 'pointer',
+                        padding: '0.4rem',
+                        borderRadius: '0.4rem',
+                        background: '#f8f9fa',
+                      }}>
+                        <input
+                          type="checkbox"
+                          checked={editForm.enable_dialogue_mode}
+                          onChange={(e) => setEditForm({ ...editForm, enable_dialogue_mode: e.target.checked })}
+                          style={{
+                            width: '16px',
+                            height: '16px',
+                            cursor: 'pointer',
+                          }}
+                        />
+                        <span style={{ fontSize: '0.85rem' }}>
+                          AI対話モードを有効にする
+                        </span>
+                      </label>
+                      <label style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.4rem',
+                        cursor: 'pointer',
+                        padding: '0.4rem',
+                        borderRadius: '0.4rem',
+                        background: '#f8f9fa',
+                      }}>
+                        <input
+                          type="checkbox"
+                          checked={editForm.enable_variation_mode}
+                          onChange={(e) => setEditForm({ ...editForm, enable_variation_mode: e.target.checked })}
+                          style={{
+                            width: '16px',
+                            height: '16px',
+                            cursor: 'pointer',
+                          }}
+                        />
+                        <span style={{ fontSize: '0.85rem' }}>
+                          AIバリエーションモードを有効にする
+                        </span>
+                      </label>
+                    </div>
+                  </div>
+
                   <div style={{ display: 'flex', gap: '0.5rem' }}>
                     <button
                       type="button"
@@ -1051,6 +1121,66 @@ export const AdminPage = () => {
                   boxSizing: 'border-box',
                 }}
               />
+            </div>
+
+            <div style={{ marginBottom: '1.5rem' }}>
+              <label style={{
+                display: 'block',
+                marginBottom: '0.75rem',
+                fontWeight: '600',
+              }}>
+                AI機能設定
+              </label>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                <label style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem',
+                  cursor: 'pointer',
+                  padding: '0.5rem',
+                  borderRadius: '0.5rem',
+                  background: '#f8f9fa',
+                }}>
+                  <input
+                    type="checkbox"
+                    checked={formData.enable_dialogue_mode}
+                    onChange={(e) => setFormData({ ...formData, enable_dialogue_mode: e.target.checked })}
+                    disabled={isLoading}
+                    style={{
+                      width: '18px',
+                      height: '18px',
+                      cursor: 'pointer',
+                    }}
+                  />
+                  <span style={{ fontSize: '0.95rem' }}>
+                    AI対話モードを有効にする
+                  </span>
+                </label>
+                <label style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem',
+                  cursor: 'pointer',
+                  padding: '0.5rem',
+                  borderRadius: '0.5rem',
+                  background: '#f8f9fa',
+                }}>
+                  <input
+                    type="checkbox"
+                    checked={formData.enable_variation_mode}
+                    onChange={(e) => setFormData({ ...formData, enable_variation_mode: e.target.checked })}
+                    disabled={isLoading}
+                    style={{
+                      width: '18px',
+                      height: '18px',
+                      cursor: 'pointer',
+                    }}
+                  />
+                  <span style={{ fontSize: '0.95rem' }}>
+                    AIバリエーションモードを有効にする
+                  </span>
+                </label>
+              </div>
             </div>
 
             <div style={{ marginBottom: '1.5rem' }}>
