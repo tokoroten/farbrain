@@ -5,6 +5,7 @@
 import { useRef, useEffect, useState } from 'react';
 import type { IdeaVisualization, ClusterData } from '../types/api';
 import { useCoordinateTransform } from '../hooks/useCoordinateTransform';
+import { drawClusters, drawConnectionLines, drawIdeas } from '../utils/canvasDrawing';
 
 interface Props {
   ideas: IdeaVisualization[];
@@ -167,245 +168,29 @@ export const VisualizationCanvas = ({ ideas, clusters, selectedIdea, onSelectIde
     // Clear canvas
     ctx.clearRect(0, 0, dimensions.width, dimensions.height);
 
-    // Draw clusters (convex hulls)
-    clusters.forEach((cluster) => {
-      if (cluster.convex_hull.length < 3) return;
+    const drawContext = { ctx, toScreenX, toScreenY };
 
-      ctx.beginPath();
-      ctx.moveTo(
-        toScreenX(cluster.convex_hull[0].x),
-        toScreenY(cluster.convex_hull[0].y)
-      );
+    // Draw clusters
+    drawClusters(clusters, drawContext);
 
-      cluster.convex_hull.forEach((point, i) => {
-        if (i > 0) {
-          ctx.lineTo(toScreenX(point.x), toScreenY(point.y));
-        }
-      });
-
-      ctx.closePath();
-      ctx.fillStyle = `hsla(${cluster.id * 60}, 60%, 85%, 0.3)`;
-      ctx.fill();
-      ctx.strokeStyle = `hsla(${cluster.id * 60}, 60%, 60%, 0.6)`;
-      ctx.lineWidth = 2;
-      ctx.stroke();
-
-      // Draw cluster label with background
-      const centerX = cluster.convex_hull.reduce((sum, p) => sum + toScreenX(p.x), 0) / cluster.convex_hull.length;
-      const centerY = cluster.convex_hull.reduce((sum, p) => sum + toScreenY(p.y), 0) / cluster.convex_hull.length;
-
-      ctx.font = 'bold 16px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-
-      // Measure text for background
-      const textMetrics = ctx.measureText(cluster.label);
-      const textWidth = textMetrics.width;
-      const textHeight = 20;
-      const padding = 8;
-
-      // Draw semi-transparent background
-      ctx.fillStyle = `hsla(${cluster.id * 60}, 60%, 95%, 0.9)`;
-      ctx.fillRect(
-        centerX - textWidth / 2 - padding,
-        centerY - textHeight / 2 - padding / 2,
-        textWidth + padding * 2,
-        textHeight + padding
-      );
-
-      // Draw border
-      ctx.strokeStyle = `hsla(${cluster.id * 60}, 60%, 60%, 0.8)`;
-      ctx.lineWidth = 2;
-      ctx.strokeRect(
-        centerX - textWidth / 2 - padding,
-        centerY - textHeight / 2 - padding / 2,
-        textWidth + padding * 2,
-        textHeight + padding
-      );
-
-      // Draw text
-      ctx.fillStyle = `hsla(${cluster.id * 60}, 70%, 30%, 1)`;
-      ctx.fillText(cluster.label, centerX, centerY);
-    });
-
-    // Draw lines connecting ideas to their closest ideas (only when hovering)
-    if (hoveredIdeaId) {
-      ideas.forEach((idea) => {
-        if (!idea.closest_idea_id) return;
-
-        const closestIdea = ideas.find(i => i.id === idea.closest_idea_id);
-        if (!closestIdea) return;
-
-        // Only draw line if hovering over this idea or its closest idea
-        const isHovered = hoveredIdeaId === idea.id || hoveredIdeaId === closestIdea.id;
-        if (!isHovered) return;
-
-        const x1 = toScreenX(idea.x);
-        const y1 = toScreenY(idea.y);
-        const x2 = toScreenX(closestIdea.x);
-        const y2 = toScreenY(closestIdea.y);
-
-        ctx.beginPath();
-        ctx.moveTo(x1, y1);
-        ctx.lineTo(x2, y2);
-
-        // Highlighted line
-        ctx.strokeStyle = 'rgba(102, 126, 234, 0.8)';
-        ctx.lineWidth = 3;
-        ctx.stroke();
-      });
-    }
+    // Draw connection lines
+    drawConnectionLines(ideas, hoveredIdeaId ?? null, drawContext);
 
     // Draw ideas
-    ideas.forEach((idea) => {
-      const x = toScreenX(idea.x);
-      const y = toScreenY(idea.y);
-      const radius = 6;
-      const isSelected = selectedIdea?.id === idea.id;
-      const isMyLatest = myLatestIdeaId === idea.id;
-      const isOthersRecent = othersRecentIdeaIds.includes(idea.id);
-      const isRecentlyVoted = recentlyVotedIdeaIds.includes(idea.id);
-      const isHovered = hoveredIdeaId === idea.id;
-      const isUserHovered = hoveredUserId ? idea.user_id === hoveredUserId : true; // true when no hover
-      const isFilteredUser = filteredUserId ? idea.user_id === filteredUserId : true; // true when no filter
-      const isFilteredCluster = filteredClusterId !== null ? idea.cluster_id === filteredClusterId : true; // true when no filter
-      const isDimmed = (hoveredIdeaId && !isHovered) || (hoveredUserId && !isUserHovered) || (filteredUserId && !isFilteredUser) || (filteredClusterId !== null && !isFilteredCluster);
+    drawIdeas(ideas, {
+      selectedIdea,
+      myLatestIdeaId,
+      othersRecentIdeaIds,
+      recentlyVotedIdeaIds,
+      pulseAnimation,
+      hoveredIdeaId: hoveredIdeaId ?? null,
+      hoveredUserId: hoveredUserId ?? null,
+      filteredUserId: filteredUserId ?? null,
+      filteredClusterId: filteredClusterId ?? null,
+      getUserColor,
+    }, drawContext);
 
-      // Set global alpha for dimming effect
-      if (isDimmed) {
-        ctx.globalAlpha = 0.15;  // Even more dimmed when filter is active
-      } else {
-        ctx.globalAlpha = 1.0;
-      }
-
-      // Draw pulsing glow effect for my latest idea (gold color)
-      if (isMyLatest) {
-        const pulseValue = Math.sin(pulseAnimation) * 0.5 + 0.5; // 0 to 1
-        const glowRadius = radius + 15 + pulseValue * 10;
-
-        // Outer glow (largest) - gold
-        const gradient1 = ctx.createRadialGradient(x, y, radius, x, y, glowRadius);
-        gradient1.addColorStop(0, `hsla(45, 90%, 60%, 0.7)`);
-        gradient1.addColorStop(0.5, `hsla(45, 90%, 60%, ${0.4 * pulseValue})`);
-        gradient1.addColorStop(1, `hsla(45, 90%, 60%, 0)`);
-
-        ctx.beginPath();
-        ctx.arc(x, y, glowRadius, 0, Math.PI * 2);
-        ctx.fillStyle = gradient1;
-        ctx.fill();
-
-        // Inner glow (medium) - brighter gold
-        const innerGlowRadius = radius + 8 + pulseValue * 5;
-        const gradient2 = ctx.createRadialGradient(x, y, radius, x, y, innerGlowRadius);
-        gradient2.addColorStop(0, `hsla(45, 100%, 70%, 0.9)`);
-        gradient2.addColorStop(1, `hsla(45, 100%, 70%, 0)`);
-
-        ctx.beginPath();
-        ctx.arc(x, y, innerGlowRadius, 0, Math.PI * 2);
-        ctx.fillStyle = gradient2;
-        ctx.fill();
-      }
-
-      // Draw pulsing glow effect for others' recent ideas (cyan color)
-      if (isOthersRecent) {
-        const pulseValue = Math.sin(pulseAnimation) * 0.5 + 0.5; // 0 to 1
-        const glowRadius = radius + 10 + pulseValue * 6;
-
-        // Outer glow - cyan
-        const gradient1 = ctx.createRadialGradient(x, y, radius, x, y, glowRadius);
-        gradient1.addColorStop(0, `hsla(180, 80%, 60%, 0.5)`);
-        gradient1.addColorStop(0.5, `hsla(180, 80%, 60%, ${0.3 * pulseValue})`);
-        gradient1.addColorStop(1, `hsla(180, 80%, 60%, 0)`);
-
-        ctx.beginPath();
-        ctx.arc(x, y, glowRadius, 0, Math.PI * 2);
-        ctx.fillStyle = gradient1;
-        ctx.fill();
-
-        // Inner glow - brighter cyan
-        const innerGlowRadius = radius + 5 + pulseValue * 3;
-        const gradient2 = ctx.createRadialGradient(x, y, radius, x, y, innerGlowRadius);
-        gradient2.addColorStop(0, `hsla(180, 90%, 70%, 0.7)`);
-        gradient2.addColorStop(1, `hsla(180, 90%, 70%, 0)`);
-
-        ctx.beginPath();
-        ctx.arc(x, y, innerGlowRadius, 0, Math.PI * 2);
-        ctx.fillStyle = gradient2;
-        ctx.fill();
-      }
-
-      // Draw pulsing glow effect for recently voted ideas (orange color)
-      if (isRecentlyVoted) {
-        const pulseValue = Math.sin(pulseAnimation) * 0.5 + 0.5; // 0 to 1
-        const glowRadius = radius + 12 + pulseValue * 8;
-
-        // Outer glow - orange
-        const gradient1 = ctx.createRadialGradient(x, y, radius, x, y, glowRadius);
-        gradient1.addColorStop(0, `hsla(30, 90%, 60%, 0.6)`);
-        gradient1.addColorStop(0.5, `hsla(30, 90%, 60%, ${0.35 * pulseValue})`);
-        gradient1.addColorStop(1, `hsla(30, 90%, 60%, 0)`);
-
-        ctx.beginPath();
-        ctx.arc(x, y, glowRadius, 0, Math.PI * 2);
-        ctx.fillStyle = gradient1;
-        ctx.fill();
-
-        // Inner glow - brighter orange
-        const innerGlowRadius = radius + 6 + pulseValue * 4;
-        const gradient2 = ctx.createRadialGradient(x, y, radius, x, y, innerGlowRadius);
-        gradient2.addColorStop(0, `hsla(30, 95%, 70%, 0.8)`);
-        gradient2.addColorStop(1, `hsla(30, 95%, 70%, 0)`);
-
-        ctx.beginPath();
-        ctx.arc(x, y, innerGlowRadius, 0, Math.PI * 2);
-        ctx.fillStyle = gradient2;
-        ctx.fill();
-      }
-
-      // Draw circle
-      ctx.beginPath();
-      ctx.arc(x, y, radius + (isSelected || isHovered ? 3 : 0), 0, Math.PI * 2);
-      // Use user-based color instead of score-based color
-      const userColor = getUserColor(idea.user_id);
-      // Brighten for latest ideas or recently voted ideas
-      const lightness = isMyLatest || isOthersRecent || isRecentlyVoted ? 70 : 60;
-      // Extract hue from user color and apply lightness
-      const hueMatch = userColor.match(/hsl\((\d+)/);
-      const hue = hueMatch ? hueMatch[1] : '200';
-      ctx.fillStyle = `hsl(${hue}, 70%, ${lightness}%)`;
-      ctx.fill();
-
-      if (isSelected) {
-        ctx.strokeStyle = '#333';
-        ctx.lineWidth = 3;
-        ctx.stroke();
-      } else if (isHovered) {
-        ctx.strokeStyle = '#667eea';
-        ctx.lineWidth = 3;
-        ctx.stroke();
-      }
-
-      // Draw border (brighter for latest idea or recently voted)
-      if (!isSelected && !isHovered) {
-        ctx.strokeStyle = (isMyLatest || isOthersRecent || isRecentlyVoted) ? '#fff' : 'white';
-        ctx.lineWidth = (isMyLatest || isOthersRecent || isRecentlyVoted) ? 3 : 2;
-        ctx.stroke();
-      }
-
-      // Draw sparkle effect for latest idea
-      if (isMyLatest) {
-        const sparkleValue = Math.sin(pulseAnimation * 2) * 0.5 + 0.5;
-        ctx.fillStyle = `rgba(255, 255, 255, ${sparkleValue})`;
-        ctx.beginPath();
-        ctx.arc(x, y, radius / 2, 0, Math.PI * 2);
-        ctx.fill();
-      }
-    });
-
-    // Reset global alpha
-    ctx.globalAlpha = 1.0;
-
-  }, [ideas, clusters, dimensions, transform, selectedIdea, myLatestIdeaId, othersRecentIdeaIds, recentlyVotedIdeaIds, pulseAnimation, hoveredIdeaId, hoveredUserId, filteredUserId, toScreenX, toScreenY]);
+  }, [ideas, clusters, dimensions, transform, selectedIdea, myLatestIdeaId, othersRecentIdeaIds, recentlyVotedIdeaIds, pulseAnimation, hoveredIdeaId, hoveredUserId, filteredUserId, filteredClusterId, toScreenX, toScreenY]);
 
   // Mouse handlers
   const handleMouseDown = (e: React.MouseEvent) => {
