@@ -11,7 +11,7 @@ import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.db.base import get_db
@@ -28,6 +28,7 @@ from backend.app.services.clustering import (
 from backend.app.services.embedding import EmbeddingService
 from backend.app.services.scoring import NoveltyScorer
 from backend.app.services.llm import get_llm_service
+from backend.app.utils.cluster_labeling import generate_simple_label, generate_cluster_label
 from backend.app.services.starter_ideas import STARTER_IDEA_TEMPLATES
 from backend.app.websocket.manager import manager
 
@@ -180,6 +181,12 @@ async def create_bulk_ideas(
 
         await db.commit()
 
+        # Delete all existing clusters for this session to avoid leftover clusters
+        await db.execute(
+            delete(Cluster).where(Cluster.session_id == data.session_id)
+        )
+        await db.commit()
+
         # Create/update clusters with simple labels
         cluster_ideas: dict[int, list[Idea]] = {}
         for idea in all_ideas:
@@ -190,7 +197,7 @@ async def create_bulk_ideas(
 
         for cluster_id, cluster_idea_list in cluster_ideas.items():
             # Simple label without LLM
-            label = f"クラスタ {cluster_id + 1}"
+            label = generate_simple_label(cluster_id)
 
             # Calculate convex hull
             cluster_coords = np.array(
@@ -461,11 +468,10 @@ async def force_cluster(
                 status_code=status.HTTP_404_NOT_FOUND, detail="Session not found"
             )
 
-        # Update fixed_cluster_count in session if provided
-        if data.fixed_cluster_count is not None:
-            session.fixed_cluster_count = data.fixed_cluster_count
-            await db.commit()
-            await db.refresh(session)
+        # Update fixed_cluster_count in session (set to None if not provided to enable auto mode)
+        session.fixed_cluster_count = data.fixed_cluster_count
+        await db.commit()
+        await db.refresh(session)
 
         # Get all ideas
         ideas_result = await db.execute(
@@ -502,6 +508,13 @@ async def force_cluster(
             idea.cluster_id = int(clustering_result.cluster_labels[i])
 
         await db.commit()
+
+        # Delete all existing clusters for this session to avoid leftover clusters
+        await db.execute(
+            delete(Cluster).where(Cluster.session_id == data.session_id)
+        )
+        await db.commit()
+        logger.info(f"[FORCE-CLUSTER] Deleted all existing clusters for session {data.session_id}")
 
         # Create/update clusters with simple labels
         cluster_ideas: dict[int, list[Idea]] = {}
@@ -541,7 +554,7 @@ async def force_cluster(
                 logger.info(f"[FORCE-CLUSTER] Generated LLM label for cluster {cluster_id}: {label}")
             else:
                 # Simple label without LLM
-                label = f"クラスタ {cluster_id + 1}"
+                label = generate_simple_label(cluster_id)
                 logger.info(f"[FORCE-CLUSTER] Using simple label for cluster {cluster_id}")
 
             return cluster_id, label, sampled_ideas
@@ -889,9 +902,9 @@ async def create_test_session(
                     logger.info(f"[TEST-SESSION] Generated LLM label for cluster {cluster_id}: {label}")
                 except Exception as e:
                     logger.error(f"[TEST-SESSION] Failed to generate LLM label for cluster {cluster_id}: {e}")
-                    label = f"クラスタ {cluster_id + 1}"  # Fallback to simple label
+                    label = generate_simple_label(cluster_id)  # Fallback to simple label
             else:
-                label = f"クラスタ {cluster_id + 1}"  # Fallback if LLM not available
+                label = generate_simple_label(cluster_id)  # Fallback if LLM not available
 
             cluster = Cluster(
                 id=cluster_id,
