@@ -29,6 +29,14 @@ from backend.app.services.embedding import EmbeddingService
 from backend.app.services.scoring import NoveltyScorer
 from backend.app.services.llm import get_llm_service
 from backend.app.utils.cluster_labeling import generate_simple_label, generate_cluster_label
+from backend.app.utils.clustering_operations import (
+    group_ideas_by_cluster,
+    generate_cluster_labels_parallel,
+    create_or_update_clusters,
+    delete_existing_clusters,
+    update_idea_coordinates,
+    build_cluster_response,
+)
 from backend.app.services.starter_ideas import STARTER_IDEA_TEMPLATES
 from backend.app.websocket.manager import manager
 
@@ -502,27 +510,18 @@ async def force_cluster(
         clustering_result = clustering_service.fit_transform(all_embeddings_array)
 
         # Update coordinates and cluster assignments
-        for i, idea in enumerate(all_ideas):
-            idea.x = float(clustering_result.coordinates[i, 0])
-            idea.y = float(clustering_result.coordinates[i, 1])
-            idea.cluster_id = int(clustering_result.cluster_labels[i])
-
-        await db.commit()
+        await update_idea_coordinates(
+            db,
+            all_ideas,
+            clustering_result.coordinates,
+            clustering_result.cluster_labels
+        )
 
         # Delete all existing clusters for this session to avoid leftover clusters
-        await db.execute(
-            delete(Cluster).where(Cluster.session_id == data.session_id)
-        )
-        await db.commit()
-        logger.info(f"[FORCE-CLUSTER] Deleted all existing clusters for session {data.session_id}")
+        await delete_existing_clusters(db, data.session_id)
 
-        # Create/update clusters with simple labels
-        cluster_ideas: dict[int, list[Idea]] = {}
-        for idea in all_ideas:
-            if idea.cluster_id is not None:
-                if idea.cluster_id not in cluster_ideas:
-                    cluster_ideas[idea.cluster_id] = []
-                cluster_ideas[idea.cluster_id].append(idea)
+        # Group ideas by cluster
+        cluster_ideas = await group_ideas_by_cluster(all_ideas)
 
         # Initialize LLM service if needed
         llm_service = None
@@ -534,79 +533,22 @@ async def force_cluster(
                 logger.error(f"[FORCE-CLUSTER] Failed to initialize LLM service: {e}")
                 llm_service = None
 
-        # Generate labels in parallel if using LLM
-        async def generate_label_for_cluster(cluster_id: int, cluster_idea_list: list[Idea]) -> tuple[int, str, list[Idea]]:
-            """Generate label for a single cluster (can run in parallel)."""
-            # Sample ideas
-            sample_size = min(10, len(cluster_idea_list))
-            sampled_ideas = np.random.choice(cluster_idea_list, sample_size, replace=False).tolist()
-
-            # Generate label
-            if data.use_llm_labels and llm_service:
-                # Use LLM to generate cluster label
-                logger.info(f"[FORCE-CLUSTER] Generating LLM label for cluster {cluster_id}")
-                sample_texts = [idea.formatted_text for idea in sampled_ideas]
-                label = await llm_service.summarize_cluster(
-                    sample_texts,
-                    custom_prompt=session.summarization_prompt,
-                    session_context=session.description
-                )
-                logger.info(f"[FORCE-CLUSTER] Generated LLM label for cluster {cluster_id}: {label}")
-            else:
-                # Simple label without LLM
-                label = generate_simple_label(cluster_id)
-                logger.info(f"[FORCE-CLUSTER] Using simple label for cluster {cluster_id}")
-
-            return cluster_id, label, sampled_ideas
-
-        # Generate all labels in parallel
-        label_tasks = [
-            generate_label_for_cluster(cluster_id, cluster_idea_list)
-            for cluster_id, cluster_idea_list in cluster_ideas.items()
-        ]
-        label_results = await asyncio.gather(*label_tasks)
+        # Generate labels in parallel
+        label_results = await generate_cluster_labels_parallel(
+            cluster_ideas,
+            session,
+            llm_service,
+            data.use_llm_labels
+        )
 
         # Create/update clusters with generated labels
-        for cluster_id, label, sampled_ideas in label_results:
-            cluster_idea_list = cluster_ideas[cluster_id]
-
-            # Calculate convex hull
-            cluster_coords = np.array([[idea.x, idea.y] for idea in cluster_idea_list])
-            convex_hull_points = clustering_service.compute_convex_hull(cluster_coords)
-
-            # Calculate average novelty
-            avg_novelty = (
-                sum(idea.novelty_score for idea in cluster_idea_list)
-                / len(cluster_idea_list)
-            )
-
-            # Create or update cluster
-            cluster_result = await db.execute(
-                select(Cluster).where(
-                    Cluster.session_id == data.session_id, Cluster.id == cluster_id
-                )
-            )
-            cluster = cluster_result.scalar_one_or_none()
-
-            if cluster:
-                cluster.label = label
-                cluster.convex_hull_points = convex_hull_points
-                cluster.sample_idea_ids = [str(idea.id) for idea in sampled_ideas]
-                cluster.idea_count = len(cluster_idea_list)
-                cluster.avg_novelty_score = avg_novelty
-            else:
-                cluster = Cluster(
-                    id=cluster_id,
-                    session_id=data.session_id,
-                    label=label,
-                    convex_hull_points=convex_hull_points,
-                    sample_idea_ids=[str(idea.id) for idea in sampled_ideas],
-                    idea_count=len(cluster_idea_list),
-                    avg_novelty_score=avg_novelty,
-                )
-                db.add(cluster)
-
-        await db.commit()
+        await create_or_update_clusters(
+            db,
+            data.session_id,
+            cluster_ideas,
+            label_results,
+            clustering_service
+        )
 
         # Get updated cluster labels from database
         clusters_result = await db.execute(
@@ -624,13 +566,7 @@ async def force_cluster(
             "idea_count": len(all_ideas),
             "cluster_count": len(cluster_ideas),
             "clustered": True,
-            "clusters": {
-                cluster_id: {
-                    "label": cluster_labels.get(cluster_id, f"クラスタ {cluster_id + 1}"),
-                    "idea_count": len(ideas),
-                }
-                for cluster_id, ideas in cluster_ideas.items()
-            },
+            "clusters": build_cluster_response(cluster_ideas, cluster_labels),
         }
     finally:
         # Always release the lock
