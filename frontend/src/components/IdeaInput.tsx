@@ -32,6 +32,14 @@ export const IdeaInput = ({ onSubmit, sessionId, enableDialogueMode = true, enab
   const [proposedIdea, setProposedIdea] = useState<string | null>(null); // Store proposed idea from LLM
   const [showProposalDialog, setShowProposalDialog] = useState(false); // Show confirmation dialog
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const chatHistoryRef = useRef<HTMLDivElement>(null); // Reference to chat history container
+
+  // Auto-scroll chat history to bottom when new messages arrive
+  useEffect(() => {
+    if (chatHistoryRef.current) {
+      chatHistoryRef.current.scrollTop = chatHistoryRef.current.scrollHeight;
+    }
+  }, [conversationHistory, aiResponse]);
 
   // Listen for external variation generation requests
   useEffect(() => {
@@ -521,15 +529,18 @@ export const IdeaInput = ({ onSubmit, sessionId, enableDialogueMode = true, enab
 
       {/* Conversation history */}
       {inputMode === 'dialogue' && conversationHistory.length > 0 && (
-        <div style={{
-          marginBottom: '0.75rem',
-          maxHeight: '300px',
-          overflowY: 'auto',
-          border: '1px solid #e0e0e0',
-          borderRadius: '0.5rem',
-          padding: '0.75rem',
-          background: '#fafafa',
-        }}>
+        <div
+          ref={chatHistoryRef}
+          style={{
+            marginBottom: '0.75rem',
+            maxHeight: '300px',
+            overflowY: 'auto',
+            border: '1px solid #e0e0e0',
+            borderRadius: '0.5rem',
+            padding: '0.75rem',
+            background: '#fafafa',
+          }}
+        >
           {conversationHistory.map((msg, idx) => (
             <div
               key={idx}
