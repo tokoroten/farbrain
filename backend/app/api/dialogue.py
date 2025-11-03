@@ -1,7 +1,7 @@
 """
 Dialogue API for idea deepening through interactive conversation.
 
-Provides streaming endpoints for engaging users in dialogue to refine ideas.
+Provides streaming and non-streaming endpoints for engaging users in dialogue to refine ideas.
 """
 
 from typing import Any
@@ -99,6 +99,65 @@ async def deepen_idea(
             "X-Accel-Buffering": "no",  # Disable nginx buffering
         },
     )
+
+
+@router.post("/deepen-with-proposal")
+async def deepen_idea_with_proposal(
+    request: DialogueRequest,
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """
+    Dialogue deepening with intelligent proposal system using Tool Use.
+
+    Returns either:
+    - {"type": "question", "content": "..."} - Continue dialogue
+    - {"type": "proposal", "content": "...", "verbalized_idea": "..."} - Propose submission
+
+    Args:
+        request: Dialogue request with message and history
+        db: Database session
+
+    Returns:
+        Dict with type and content (and verbalized_idea if proposal)
+
+    Raises:
+        HTTPException: If message is empty or LLM fails
+    """
+    if not request.message.strip():
+        raise HTTPException(status_code=400, detail="Message cannot be empty")
+
+    # Get session context if session_id provided
+    session_context = None
+    if request.session_id:
+        session_result = await db.execute(
+            select(Session).where(Session.id == request.session_id)
+        )
+        session = session_result.scalar_one_or_none()
+        if session:
+            # Check if session is accepting new ideas
+            if not session.accepting_ideas:
+                raise HTTPException(
+                    status_code=403,
+                    detail="このセッションは停止されているため、新しいアイデアを投稿できません"
+                )
+            session_context = session.description
+
+    llm_service = get_llm_service()
+
+    try:
+        result = await llm_service.deepen_idea_with_tools(
+            raw_text=request.message,
+            conversation_history=request.conversation_history,
+            session_context=session_context,
+        )
+
+        return result
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to deepen idea: {str(e)}",
+        )
 
 
 @router.post("/finalize")

@@ -29,6 +29,8 @@ export const IdeaInput = ({ onSubmit, sessionId, enableDialogueMode = true, enab
   const [originalText, setOriginalText] = useState<string>(''); // Store user's original input
   const [isOriginalSelected, setIsOriginalSelected] = useState(false); // Track if original text is selected
   const [isFromExistingIdea, setIsFromExistingIdea] = useState(false); // Track if variations are from existing idea
+  const [proposedIdea, setProposedIdea] = useState<string | null>(null); // Store proposed idea from LLM
+  const [showProposalDialog, setShowProposalDialog] = useState(false); // Show confirmation dialog
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Listen for external variation generation requests
@@ -89,50 +91,29 @@ export const IdeaInput = ({ onSubmit, sessionId, enableDialogueMode = true, enab
     setConversationHistory(newHistory);
 
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/dialogue/deepen`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          message: text.trim(),
-          conversation_history: newHistory,
-          session_id: sessionId,
-        }),
+      // Use new API with proposal system
+      const result = await api.dialogue.deepenWithProposal({
+        message: text.trim(),
+        conversation_history: newHistory,
+        session_id: sessionId!,
       });
 
-      if (!response.ok) {
-        throw new Error('Failed to get AI response');
+      if (result.type === 'proposal') {
+        // LLM is proposing to submit the idea
+        setProposedIdea(result.verbalized_idea!);
+        setAiResponse(result.content || `対話が深まりました。以下の内容で投稿してよろしいですか？\n\n「${result.verbalized_idea}」`);
+        setShowProposalDialog(true);
+
+        // Add AI response to history
+        setConversationHistory([...newHistory, { role: 'assistant', content: result.content || '投稿を提案します' }]);
+      } else {
+        // LLM is continuing the conversation with a question
+        setAiResponse(result.content);
+
+        // Add AI response to history
+        setConversationHistory([...newHistory, { role: 'assistant', content: result.content }]);
       }
 
-      const reader = response.body?.getReader();
-      if (!reader) throw new Error('No response stream');
-
-      const decoder = new TextDecoder();
-      let fullResponse = '';
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        const chunk = decoder.decode(value);
-        const lines = chunk.split('\n');
-
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            const data = line.slice(6);
-            if (data === '[DONE]') {
-              break;
-            } else if (data.startsWith('[ERROR]')) {
-              throw new Error(data.slice(8));
-            } else {
-              fullResponse += data;
-              setAiResponse(fullResponse);
-            }
-          }
-        }
-      }
-
-      // Add AI response to history
-      setConversationHistory([...newHistory, { role: 'assistant', content: fullResponse }]);
       setText('');
     } catch (err) {
       console.error('Dialogue error:', err);
@@ -140,6 +121,37 @@ export const IdeaInput = ({ onSubmit, sessionId, enableDialogueMode = true, enab
     } finally {
       setIsStreaming(false);
     }
+  };
+
+  const handleProposalAccept = async () => {
+    if (!proposedIdea) return;
+
+    setIsSubmitting(true);
+    setError(null);
+    setShowProposalDialog(false);
+
+    try {
+      // Submit the proposed idea (skip formatting since LLM already formatted it)
+      await onSubmit(proposedIdea, true, proposedIdea);
+
+      // Reset dialogue mode
+      setInputMode('direct');
+      setConversationHistory([]);
+      setAiResponse('');
+      setText('');
+      setProposedIdea(null);
+    } catch (err) {
+      console.error('Failed to submit idea:', err);
+      setError('アイディアの投稿に失敗しました');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleProposalReject = () => {
+    setShowProposalDialog(false);
+    setProposedIdea(null);
+    // User can continue the conversation
   };
 
   const handleDialogueFinalize = async () => {
@@ -546,6 +558,87 @@ export const IdeaInput = ({ onSubmit, sessionId, enableDialogueMode = true, enab
               <div>{aiResponse}</div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Proposal Dialog */}
+      {showProposalDialog && proposedIdea && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000,
+        }}>
+          <div style={{
+            background: 'white',
+            borderRadius: '1rem',
+            padding: '2rem',
+            maxWidth: '500px',
+            width: '90%',
+            boxShadow: '0 4px 20px rgba(0, 0, 0, 0.15)',
+          }}>
+            <h3 style={{ marginTop: 0, marginBottom: '1rem', fontSize: '1.25rem' }}>
+              アイディアの投稿確認
+            </h3>
+            <p style={{ color: '#666', marginBottom: '1rem' }}>
+              対話が深まりました。以下の内容で投稿してよろしいですか？
+            </p>
+            <div style={{
+              background: '#f5f5f5',
+              borderRadius: '0.5rem',
+              padding: '1rem',
+              marginBottom: '1.5rem',
+              border: '2px solid #667eea',
+            }}>
+              <p style={{ margin: 0, fontSize: '1rem', lineHeight: '1.5' }}>
+                「{proposedIdea}」
+              </p>
+            </div>
+            <div style={{ display: 'flex', gap: '1rem' }}>
+              <button
+                onClick={handleProposalReject}
+                disabled={isSubmitting}
+                style={{
+                  flex: 1,
+                  padding: '0.75rem',
+                  background: '#f0f0f0',
+                  color: '#666',
+                  border: 'none',
+                  borderRadius: '0.5rem',
+                  fontSize: '1rem',
+                  fontWeight: '600',
+                  cursor: isSubmitting ? 'not-allowed' : 'pointer',
+                  opacity: isSubmitting ? 0.5 : 1,
+                }}
+              >
+                いいえ、続ける
+              </button>
+              <button
+                onClick={handleProposalAccept}
+                disabled={isSubmitting}
+                style={{
+                  flex: 1,
+                  padding: '0.75rem',
+                  background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '0.5rem',
+                  fontSize: '1rem',
+                  fontWeight: '600',
+                  cursor: isSubmitting ? 'not-allowed' : 'pointer',
+                  opacity: isSubmitting ? 0.5 : 1,
+                }}
+              >
+                {isSubmitting ? '投稿中...' : 'はい、投稿する'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

@@ -142,6 +142,29 @@ export interface ScoreboardResponse {
   rankings: ScoreboardEntry[];
 }
 
+// Dialogue types
+export interface VariationRequest {
+  session_id: string;
+  keyword: string;
+  count?: number;
+}
+
+export interface VariationResponse {
+  variations: string[];
+}
+
+export interface DialogueRequest {
+  session_id: string;
+  message: string;
+  conversation_history?: Array<{ role: string; content: string }>;
+}
+
+export interface DialogueResponse {
+  type: 'question' | 'proposal';
+  content: string;
+  verbalized_idea?: string;  // Only present when type is 'proposal'
+}
+
 // WebSocket event types
 export type WebSocketEvent =
   | { type: 'idea_created'; data: IdeaVisualization }

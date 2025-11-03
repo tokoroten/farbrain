@@ -20,6 +20,8 @@ import type {
   ScoreboardResponse,
   VariationRequest,
   VariationResponse,
+  DialogueRequest,
+  DialogueResponse,
 } from '../types/api';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
@@ -202,6 +204,11 @@ export const api = {
   dialogue: {
     generateVariations: async (data: VariationRequest): Promise<VariationResponse> => {
       const response = await apiClient.post('/api/dialogue/variations', data);
+      return response.data;
+    },
+
+    deepenWithProposal: async (data: DialogueRequest): Promise<DialogueResponse> => {
+      const response = await apiClient.post('/api/dialogue/deepen-with-proposal', data);
       return response.data;
     },
   },

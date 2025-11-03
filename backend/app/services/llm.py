@@ -318,6 +318,139 @@ class LLMService:
             logger.error(f"[LLM METHOD] Raw response: {response}")
             raise ValueError(f"Failed to parse LLM response as JSON: {e}")
 
+    async def deepen_idea_with_tools(
+        self,
+        raw_text: str,
+        conversation_history: list[dict[str, str]] | None = None,
+        session_context: str | None = None,
+    ) -> dict:
+        """
+        Engage in dialogue to deepen an idea (with tool calling for proposal).
+
+        Args:
+            raw_text: User's response or initial idea
+            conversation_history: Previous conversation messages
+            session_context: Optional session description/theme for context
+
+        Returns:
+            Dict with 'type' ('question' or 'proposal') and 'content'
+
+        Raises:
+            ValueError: If raw_text is empty
+            httpx.HTTPError: If LLM API fails
+        """
+        logger.info(f"[LLM METHOD] deepen_idea_with_tools() called with raw_text='{raw_text[:100]}...', has_conversation_history={conversation_history is not None}, has_session_context={session_context is not None}")
+
+        if not raw_text.strip():
+            raise ValueError("Raw text cannot be empty")
+
+        # Calculate conversation depth
+        conversation_depth = len(conversation_history) // 2 if conversation_history else 0
+
+        # System prompt for dialogue mode with tool use capability
+        system_prompt = """あなたはブレインストーミングセッションのファシリテーターです。
+参加者のアイデアを深めるために、効果的な質問を投げかけるのがあなたの役割です。
+
+対話の原則:
+- 一度に1つの質問をする
+- オープンエンドな質問を優先する
+- アイデアの実現可能性、影響、具体性を探る
+- 参加者の発想を否定せず、拡張を促す
+- 3-4往復の対話でアイデアを十分に深める
+- 簡潔で親しみやすい口調を保つ
+
+重要: 3往復以上の対話が行われ、アイデアが十分に具体化されたと判断した場合は、
+propose_idea_submission ツールを使ってアイデアの投稿を提案してください。
+投稿提案では、これまでの対話を踏まえてアイデアを簡潔に言語化してください（1-2文）。"""
+
+        # Add session context if available
+        if session_context:
+            system_prompt += f"\n\nセッションのテーマ・目的:\n{session_context}\n\n上記のコンテキストを踏まえて、質問を投げかけてください。"
+
+        # Build conversation with history
+        if conversation_history:
+            # Use conversation history as context
+            prompt_with_history = f"""これまでの対話:
+{chr(10).join([f"{msg['role']}: {msg['content']}" for msg in conversation_history])}
+
+ユーザーの最新の返答: {raw_text}
+
+上記の対話を踏まえて、次の質問をするか、アイデアが十分に深まったと判断した場合は投稿を提案してください。
+現在の対話回数: {conversation_depth}往復目"""
+        else:
+            prompt_with_history = raw_text
+
+        # Define the tool for proposal
+        tools = [{
+            "type": "function",
+            "function": {
+                "name": "propose_idea_submission",
+                "description": "対話が十分に深まったと判断した場合に、アイデアの投稿を提案する",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "verbalized_idea": {
+                            "type": "string",
+                            "description": "これまでの対話を踏まえて言語化されたアイデア（1-2文で簡潔に）"
+                        }
+                    },
+                    "required": ["verbalized_idea"],
+                    "additionalProperties": False
+                }
+            }
+        }]
+
+        # Call LLM with tool support
+        import httpx
+        import json
+
+        messages = []
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+        messages.append({"role": "user", "content": prompt_with_history})
+
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                "https://api.openai.com/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {self.provider.api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": self.provider.model,
+                    "messages": messages,
+                    "temperature": 0.8,
+                    "max_tokens": 300,
+                    "tools": tools,
+                    "tool_choice": "auto",
+                },
+                timeout=30.0,
+            )
+            response.raise_for_status()
+            data = response.json()
+
+        message = data["choices"][0]["message"]
+
+        # Check if tool was called
+        if message.get("tool_calls"):
+            tool_call = message["tool_calls"][0]
+            function_args = json.loads(tool_call["function"]["arguments"])
+            verbalized_idea = function_args["verbalized_idea"]
+
+            logger.info(f"[LLM METHOD] Tool called - proposing idea: {verbalized_idea}")
+
+            return {
+                "type": "proposal",
+                "content": message.get("content", ""),
+                "verbalized_idea": verbalized_idea
+            }
+        else:
+            # Regular question
+            return {
+                "type": "question",
+                "content": message["content"]
+            }
+
     async def deepen_idea(
         self,
         raw_text: str,
@@ -344,6 +477,9 @@ class LLMService:
         if not raw_text.strip():
             raise ValueError("Raw text cannot be empty")
 
+        # Calculate conversation depth
+        conversation_depth = len(conversation_history) // 2 if conversation_history else 0
+
         # System prompt for dialogue mode
         system_prompt = """あなたはブレインストーミングセッションのファシリテーターです。
 参加者のアイデアを深めるために、効果的な質問を投げかけるのがあなたの役割です。
@@ -360,11 +496,22 @@ class LLMService:
         if session_context:
             system_prompt += f"\n\nセッションのテーマ・目的:\n{session_context}\n\n上記のコンテキストを踏まえて、質問を投げかけてください。"
 
-        # Build messages for streaming
-        # Note: We need to handle the messages differently for streaming
-        # For now, we'll pass the raw_text as prompt
+        # Build conversation with history
+        if conversation_history:
+            # Use conversation history as context
+            prompt_with_history = f"""これまでの対話:
+{chr(10).join([f"{msg['role']}: {msg['content']}" for msg in conversation_history])}
+
+ユーザーの最新の返答: {raw_text}
+
+上記の対話を踏まえて、次の質問をしてください。
+現在の対話回数: {conversation_depth}往復目"""
+        else:
+            prompt_with_history = raw_text
+
+        # Stream response from LLM
         async for chunk in self.provider.generate_stream(
-            prompt=raw_text,
+            prompt=prompt_with_history,
             system_prompt=system_prompt,
             temperature=0.8,
             max_tokens=300,
