@@ -1,49 +1,22 @@
 /**
- * Environment configuration with automatic domain detection
+ * Environment configuration
+ *
+ * Use start-local.ps1 for local development (localhost:8000)
+ * Use start-farbrain.ps1 for production hosting (api-farbrain.easyrec.app)
  */
 
 /**
- * Get API base URL based on current hostname
- * - localhost: http://localhost:8000
- * - production: https://api-farbrain.easyrec.app
- * - Can be overridden by VITE_API_URL environment variable
+ * Get API base URL from environment variable
+ * Defaults to localhost if not set
  */
 export function getApiUrl(): string {
-  // Environment variable takes precedence (for flexibility)
-  if (import.meta.env.VITE_API_URL) {
-    return import.meta.env.VITE_API_URL;
-  }
-
-  // Auto-detect based on hostname
-  const hostname = window.location.hostname;
-
-  if (hostname === 'localhost' || hostname === '127.0.0.1') {
-    return 'http://localhost:8000';
-  }
-
-  // Production environment
-  return 'https://api-farbrain.easyrec.app';
+  return import.meta.env.VITE_API_URL || 'http://localhost:8000';
 }
 
 /**
- * Get WebSocket URL based on current hostname
- * - localhost: ws://localhost:8000
- * - production: wss://api-farbrain.easyrec.app
- * - Can be overridden by VITE_WS_URL environment variable
+ * Get WebSocket URL from environment variable
+ * Defaults to localhost if not set
  */
 export function getWebSocketUrl(): string {
-  // Environment variable takes precedence (for flexibility)
-  if (import.meta.env.VITE_WS_URL) {
-    return import.meta.env.VITE_WS_URL;
-  }
-
-  // Auto-detect based on hostname
-  const hostname = window.location.hostname;
-
-  if (hostname === 'localhost' || hostname === '127.0.0.1') {
-    return 'ws://localhost:8000';
-  }
-
-  // Production environment (wss for secure WebSocket)
-  return 'wss://api-farbrain.easyrec.app';
+  return import.meta.env.VITE_WS_URL || 'ws://localhost:8000';
 }

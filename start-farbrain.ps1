@@ -18,18 +18,14 @@ Write-Host ""
 # Get script directory
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 
-# Create frontend .env file if it doesn't exist
+# Create frontend .env file for production hosting
+Write-Host "Setting up production environment..." -ForegroundColor Yellow
 $envFile = Join-Path $scriptDir "frontend\.env"
-if (-not (Test-Path $envFile)) {
-    Write-Host "Creating frontend\.env file..." -ForegroundColor Yellow
-    @"
+@"
 VITE_API_URL=https://api-farbrain.easyrec.app
 VITE_WS_URL=wss://api-farbrain.easyrec.app
-"@ | Out-File -FilePath $envFile -Encoding utf8
-    Write-Host "✓ Created frontend\.env" -ForegroundColor Green
-} else {
-    Write-Host "✓ frontend\.env already exists" -ForegroundColor Green
-}
+"@ | Out-File -FilePath $envFile -Encoding utf8 -Force
+Write-Host "✓ Created frontend\.env for production hosting" -ForegroundColor Green
 Write-Host ""
 
 # Start Backend
@@ -61,6 +57,11 @@ Write-Host "  - Public URL:     " -NoNewline -ForegroundColor White
 Write-Host "https://farbrain.easyrec.app" -ForegroundColor Green
 Write-Host "  - API Docs:       " -NoNewline -ForegroundColor White
 Write-Host "https://api-farbrain.easyrec.app/docs" -ForegroundColor Green
+Write-Host ""
+Write-Host "Mode: " -NoNewline -ForegroundColor White
+Write-Host "PRODUCTION HOSTING" -ForegroundColor Green
+Write-Host "Frontend will connect to: " -NoNewline -ForegroundColor White
+Write-Host "https://api-farbrain.easyrec.app" -ForegroundColor Blue
 Write-Host ""
 Write-Host "To stop all services, close all 3 windows." -ForegroundColor Gray
 Write-Host "========================================" -ForegroundColor Cyan

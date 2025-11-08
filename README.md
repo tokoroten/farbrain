@@ -111,14 +111,26 @@ cp backend/.env.example backend/.env
 # OPENAI_API_KEY=sk-your-key-here
 ```
 
-### 3. フロントエンド設定
+### 3. 起動方法
 
-```bash
-# .envファイルを作成（デフォルト値でOK）
-cp frontend/.env.example frontend/.env
+**ローカル開発用（推奨）:**
+```powershell
+.\start-local.ps1
 ```
+- フロントエンド: http://localhost:5173
+- バックエンド: http://localhost:8000
+- フロントエンドは自動的に `localhost:8000` に接続します
 
-### 4. 起動
+**本番ホスティング用（Cloudflare Tunnel）:**
+```powershell
+.\start-farbrain.ps1
+```
+- 公開URL: https://farbrain.easyrec.app
+- API: https://api-farbrain.easyrec.app
+- フロントエンドは自動的に本番APIに接続します
+- Cloudflare Tunnelの設定が必要です（`CLOUDFLARE_TUNNEL_SETUP.md`参照）
+
+### 4. 手動起動（個別に起動したい場合）
 
 **Linux/Mac:**
 ```bash
@@ -138,11 +150,7 @@ start_backend.bat
 start_frontend.bat
 ```
 
-### 5. アクセス
-
-- フロントエンド: http://localhost:5173
-- バックエンドAPI: http://localhost:8000
-- API ドキュメント: http://localhost:8000/docs
+**注意:** 手動起動の場合、`frontend/.env`ファイルを手動で作成する必要があります。
 
 ## 使い方
 
