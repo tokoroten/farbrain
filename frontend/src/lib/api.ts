@@ -4,6 +4,7 @@
 
 import axios from 'axios';
 import { downloadFile } from '../utils/download';
+import { getApiUrl } from './config';
 import type {
   Session,
   SessionCreateRequest,
@@ -24,7 +25,7 @@ import type {
   DialogueResponse,
 } from '../types/api';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const API_BASE_URL = getApiUrl();
 
 const apiClient = axios.create({
   baseURL: API_BASE_URL,

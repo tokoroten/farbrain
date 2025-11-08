@@ -36,6 +36,10 @@ class Session(Base):
         accepting_ideas: Whether session is accepting new ideas
         formatting_prompt: Custom prompt for idea formatting
         summarization_prompt: Custom prompt for cluster summarization
+        fixed_cluster_count: Fixed number of clusters (nullable)
+        enable_dialogue_mode: Enable AI dialogue mode
+        enable_variation_mode: Enable variation generation mode
+        penalize_self_similarity: Penalize similar ideas from same user (default: True)
         created_at: Creation timestamp
     """
 
@@ -66,6 +70,7 @@ class Session(Base):
     fixed_cluster_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     enable_dialogue_mode: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     enable_variation_mode: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    penalize_self_similarity: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime,
         nullable=False,

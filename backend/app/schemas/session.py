@@ -40,6 +40,10 @@ class SessionCreate(BaseModel):
         default=True,
         description="Enable AI variation mode for participants"
     )
+    penalize_self_similarity: bool = Field(
+        default=True,
+        description="Penalize novelty score for similar ideas from same user"
+    )
 
 
 class SessionUpdate(BaseModel):
@@ -53,6 +57,7 @@ class SessionUpdate(BaseModel):
     summarization_prompt: str | None = Field(default=None, max_length=2000)
     enable_dialogue_mode: bool | None = None
     enable_variation_mode: bool | None = None
+    penalize_self_similarity: bool | None = None
 
 
 class SessionResponse(BaseModel):
@@ -71,6 +76,7 @@ class SessionResponse(BaseModel):
     summarization_prompt: str | None = Field(None, description="Custom summarization prompt")
     enable_dialogue_mode: bool = Field(default=True, description="AI dialogue mode enabled")
     enable_variation_mode: bool = Field(default=True, description="AI variation mode enabled")
+    penalize_self_similarity: bool = Field(default=True, description="Penalize similar ideas from same user")
     created_at: datetime = Field(..., description="Creation timestamp")
 
     model_config = {"from_attributes": True}

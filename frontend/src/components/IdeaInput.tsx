@@ -4,6 +4,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { api } from '../lib/api';
+import { getApiUrl } from '../lib/config';
 
 interface Props {
   onSubmit: (text: string, skipFormatting?: boolean, formattedText?: string) => Promise<void>;
@@ -174,7 +175,7 @@ export const IdeaInput = ({ onSubmit, sessionId, enableDialogueMode = true, enab
     }
 
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/dialogue/finalize`, {
+      const response = await fetch(`${getApiUrl()}/api/dialogue/finalize`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

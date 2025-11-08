@@ -39,6 +39,11 @@ export interface Session {
   accepting_ideas: boolean;
   participant_count: number;
   idea_count: number;
+  formatting_prompt: string | null;
+  summarization_prompt: string | null;
+  enable_dialogue_mode: boolean;
+  enable_variation_mode: boolean;
+  penalize_self_similarity: boolean;
   created_at: string;
 }
 
@@ -48,6 +53,9 @@ export interface SessionCreateRequest {
   password?: string;
   formatting_prompt?: string;
   summarization_prompt?: string;
+  enable_dialogue_mode?: boolean;
+  enable_variation_mode?: boolean;
+  penalize_self_similarity?: boolean;
 }
 
 export interface SessionUpdateRequest {
@@ -57,6 +65,9 @@ export interface SessionUpdateRequest {
   accepting_ideas?: boolean;
   formatting_prompt?: string;
   summarization_prompt?: string;
+  enable_dialogue_mode?: boolean;
+  enable_variation_mode?: boolean;
+  penalize_self_similarity?: boolean;
 }
 
 export interface SessionListResponse {

@@ -155,16 +155,19 @@ async def _format_and_embed_text(
 def _calculate_novelty_and_closest(
     embedding: np.ndarray,
     existing_ideas: list[Idea],
-    current_user_id: str
+    current_user_id: str,
+    penalize_self_similarity: bool = True
 ) -> tuple[float, str | None]:
     """
     Calculate novelty score and find closest existing idea.
-    If the closest idea belongs to the same user, apply a 0.5x penalty.
+    If penalize_self_similarity is True and the closest idea belongs to the same user,
+    apply a 0.5x penalty.
 
     Args:
         embedding: Embedding vector of new idea
         existing_ideas: List of existing ideas in session
         current_user_id: User ID of the user submitting the new idea
+        penalize_self_similarity: Whether to penalize similar ideas from same user
 
     Returns:
         Tuple of (novelty_score, closest_idea_id)
@@ -193,8 +196,8 @@ def _calculate_novelty_and_closest(
         existing_embeddings
     )
 
-    # Apply 0.5x penalty if closest idea is from the same user
-    if closest_idea.user_id == current_user_id:
+    # Apply 0.5x penalty if penalize_self_similarity is enabled and closest idea is from the same user
+    if penalize_self_similarity and closest_idea.user_id == current_user_id:
         novelty_score *= 0.5
         logger.info(f"Applied 0.5x penalty: closest idea is from same user (score: {novelty_score:.2f})")
 
@@ -257,7 +260,8 @@ async def create_idea(
     novelty_score, closest_idea_id = _calculate_novelty_and_closest(
         embedding,
         existing_ideas,
-        idea_data.user_id
+        idea_data.user_id,
+        session.penalize_self_similarity
     )
 
     # Extract existing embeddings for clustering

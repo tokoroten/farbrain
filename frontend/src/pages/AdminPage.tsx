@@ -49,6 +49,7 @@ export const AdminPage = () => {
     summarization_prompt: '',
     enable_dialogue_mode: true,
     enable_variation_mode: true,
+    penalize_self_similarity: true,
   });
   const [isSaving, setIsSaving] = useState(false);
 
@@ -61,6 +62,7 @@ export const AdminPage = () => {
     summarization_prompt: DEFAULT_SUMMARIZATION_PROMPT,
     enable_dialogue_mode: true,
     enable_variation_mode: true,
+    penalize_self_similarity: true,
   });
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -142,6 +144,7 @@ export const AdminPage = () => {
       summarization_prompt: session.summarization_prompt || '',
       enable_dialogue_mode: session.enable_dialogue_mode,
       enable_variation_mode: session.enable_variation_mode,
+      penalize_self_similarity: session.penalize_self_similarity,
     });
   };
 
@@ -204,6 +207,7 @@ export const AdminPage = () => {
       if (editForm.summarization_prompt.trim()) updateData.summarization_prompt = editForm.summarization_prompt.trim();
       updateData.enable_dialogue_mode = editForm.enable_dialogue_mode;
       updateData.enable_variation_mode = editForm.enable_variation_mode;
+      updateData.penalize_self_similarity = editForm.penalize_self_similarity;
 
       await api.sessions.update(editingSession.id, updateData);
       await fetchSessions();
@@ -258,6 +262,7 @@ export const AdminPage = () => {
         summarization_prompt: formData.summarization_prompt || undefined,
         enable_dialogue_mode: formData.enable_dialogue_mode,
         enable_variation_mode: formData.enable_variation_mode,
+        penalize_self_similarity: formData.penalize_self_similarity,
       });
 
       // Navigate to the session
@@ -1025,6 +1030,37 @@ export const AdminPage = () => {
                     </div>
                   </div>
 
+                  <div style={{ marginBottom: '1rem' }}>
+                    <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '600', fontSize: '0.9rem' }}>
+                      評価基準設定
+                    </label>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                      <label style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.4rem',
+                        cursor: 'pointer',
+                        padding: '0.4rem',
+                        borderRadius: '0.4rem',
+                        background: '#f8f9fa',
+                      }}>
+                        <input
+                          type="checkbox"
+                          checked={editForm.penalize_self_similarity}
+                          onChange={(e) => setEditForm({ ...editForm, penalize_self_similarity: e.target.checked })}
+                          style={{
+                            width: '16px',
+                            height: '16px',
+                            cursor: 'pointer',
+                          }}
+                        />
+                        <span style={{ fontSize: '0.85rem' }}>
+                          同じユーザーの類似アイデアには新規性スコアを下げる
+                        </span>
+                      </label>
+                    </div>
+                  </div>
+
                   <div style={{ display: 'flex', gap: '0.5rem' }}>
                     <button
                       type="button"
@@ -1263,6 +1299,42 @@ export const AdminPage = () => {
                   />
                   <span style={{ fontSize: '0.95rem' }}>
                     AIバリエーションモードを有効にする
+                  </span>
+                </label>
+              </div>
+            </div>
+
+            <div style={{ marginBottom: '1.5rem' }}>
+              <label style={{
+                display: 'block',
+                marginBottom: '0.75rem',
+                fontWeight: '600',
+              }}>
+                評価基準設定
+              </label>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                <label style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem',
+                  cursor: 'pointer',
+                  padding: '0.5rem',
+                  borderRadius: '0.5rem',
+                  background: '#f8f9fa',
+                }}>
+                  <input
+                    type="checkbox"
+                    checked={formData.penalize_self_similarity}
+                    onChange={(e) => setFormData({ ...formData, penalize_self_similarity: e.target.checked })}
+                    disabled={isLoading}
+                    style={{
+                      width: '18px',
+                      height: '18px',
+                      cursor: 'pointer',
+                    }}
+                  />
+                  <span style={{ fontSize: '0.95rem' }}>
+                    同じユーザーの類似アイデアには新規性スコアを下げる
                   </span>
                 </label>
               </div>
