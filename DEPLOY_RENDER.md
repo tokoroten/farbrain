@@ -87,7 +87,7 @@ Renderダッシュボードで、バックエンドサービス (`farbrain-api`)
 
 デプロイが完了すると、以下のURLでアクセスできます：
 
-- **フロントエンド**: `https://farbrain-frontend.onrender.com`
+- **フロントエンド**: `https://farbrain.onrender.com`
 - **バックエンドAPI**: `https://farbrain-api.onrender.com`
 - **API Docs**: `https://farbrain-api.onrender.com/docs`
 
@@ -144,7 +144,7 @@ Renderが自動的に：
 
 Renderの無料プランでもカスタムドメインを設定できます：
 
-1. Render Dashboard → `farbrain-frontend` → Settings → Custom Domains
+1. Render Dashboard → `farbrain` → Settings → Custom Domains
 2. 「Add Custom Domain」
 3. ドメインのDNSレコードを設定（指示に従う）
 
