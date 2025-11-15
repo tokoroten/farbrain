@@ -46,7 +46,6 @@ services:
     name: farbrain
     runtime: static
     plan: free
-    region: oregon
     buildCommand: |
       cd frontend
       npm ci
