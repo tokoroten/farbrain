@@ -18,7 +18,7 @@ services:
     plan: free # 750 hours/month, sleeps after 15 min inactivity
     region: oregon
     buildCommand: cd backend && pip install -r requirements.txt
-    startCommand: uvicorn backend.app.main:app --host 0.0.0.0 --port $PORT
+    startCommand: PYTHONPATH=/opt/render/project/src uvicorn backend.app.main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /health
     envVars:
       - key: DATABASE_URL
