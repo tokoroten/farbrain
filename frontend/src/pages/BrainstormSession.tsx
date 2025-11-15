@@ -177,7 +177,13 @@ export const BrainstormSession = () => {
           setSelectedIdea(null);
         }
         // Refresh scoreboard
-        fetchScoreboard();
+        if (sessionId) {
+          api.visualization.getScoreboard(sessionId).then((scoreboardData) => {
+            setScoreboard(scoreboardData.rankings);
+          }).catch((err) => {
+            console.error('Failed to refresh scoreboard:', err);
+          });
+        }
         break;
 
       case 'vote_added':
@@ -187,8 +193,8 @@ export const BrainstormSession = () => {
             idea.id === event.data.idea_id
               ? {
                   ...idea,
-                  vote_count: idea.vote_count + 1,
-                  user_has_voted: event.data.user_id === userId ? true : idea.user_has_voted,
+                  vote_count: event.data.vote_count,
+                  user_has_voted: event.data.user_has_voted,
                 }
               : idea
           )
@@ -211,8 +217,8 @@ export const BrainstormSession = () => {
             idea.id === event.data.idea_id
               ? {
                   ...idea,
-                  vote_count: Math.max(0, idea.vote_count - 1),
-                  user_has_voted: event.data.user_id === userId ? false : idea.user_has_voted,
+                  vote_count: event.data.vote_count,
+                  user_has_voted: event.data.user_has_voted,
                 }
               : idea
           )
@@ -713,7 +719,6 @@ export const BrainstormSession = () => {
             onVoteIdea={handleVoteIdea}
             onUnvoteIdea={handleUnvoteIdea}
             onUserFilterChange={setFilteredUserId}
-            onClusterFilterChange={setFilteredClusterId}
           />
         </div>
       </div>

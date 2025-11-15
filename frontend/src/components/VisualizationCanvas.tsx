@@ -35,7 +35,7 @@ const getUserColor = (userId: string): string => {
 
 export const getUserColorFromId = getUserColor; // Export for use in Scoreboard
 
-export const VisualizationCanvas = ({ ideas, clusters, selectedIdea, onSelectIdea, hoveredIdeaId, hoveredUserId, currentUserId, onDeleteIdea, recentlyVotedIdeaIds = [], filteredUserId, filteredClusterId }: Props) => {
+export const VisualizationCanvas = ({ ideas, clusters, selectedIdea, onSelectIdea, hoveredIdeaId, hoveredUserId, currentUserId, onDeleteIdea: _onDeleteIdea, recentlyVotedIdeaIds = [], filteredUserId, filteredClusterId }: Props) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
