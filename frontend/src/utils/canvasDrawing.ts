@@ -2,7 +2,7 @@
  * Canvas drawing utilities for visualization
  */
 
-import type { IdeaVisualization, ClusterVisualization } from '../types/api';
+import type { IdeaVisualization, ClusterVisualization, Point2D } from '../types/api';
 
 interface DrawContext {
   ctx: CanvasRenderingContext2D;
@@ -27,7 +27,7 @@ export function drawClusters(
       toScreenY(cluster.convex_hull[0].y)
     );
 
-    cluster.convex_hull.forEach((point, i) => {
+    cluster.convex_hull.forEach((point: Point2D, i: number) => {
       if (i > 0) {
         ctx.lineTo(toScreenX(point.x), toScreenY(point.y));
       }
@@ -41,8 +41,8 @@ export function drawClusters(
     ctx.stroke();
 
     // Draw cluster label
-    const centerX = cluster.convex_hull.reduce((sum, p) => sum + toScreenX(p.x), 0) / cluster.convex_hull.length;
-    const centerY = cluster.convex_hull.reduce((sum, p) => sum + toScreenY(p.y), 0) / cluster.convex_hull.length;
+    const centerX = cluster.convex_hull.reduce((sum: number, p: Point2D) => sum + toScreenX(p.x), 0) / cluster.convex_hull.length;
+    const centerY = cluster.convex_hull.reduce((sum: number, p: Point2D) => sum + toScreenY(p.y), 0) / cluster.convex_hull.length;
 
     ctx.font = 'bold 16px sans-serif';
     ctx.textAlign = 'center';

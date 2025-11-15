@@ -63,6 +63,12 @@ export const IdeaInput = ({ onSubmit, sessionId, enableDialogueMode = true, enab
       setIsOriginalSelected(false);
       setIsFromExistingIdea(true); // Mark as from existing idea
 
+      if (!sessionId) {
+        setError('セッションIDが必要です');
+        setIsGenerating(false);
+        return;
+      }
+
       try {
         const response = await api.dialogue.generateVariations({
           keyword: ideaText,
@@ -214,6 +220,11 @@ export const IdeaInput = ({ onSubmit, sessionId, enableDialogueMode = true, enab
   const handleGenerateVariations = async () => {
     if (!text.trim()) {
       setError('キーワードを入力してください');
+      return;
+    }
+
+    if (!sessionId) {
+      setError('セッションIDが必要です');
       return;
     }
 

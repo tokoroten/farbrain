@@ -128,6 +128,8 @@ export interface IdeaVisualization {
   closest_idea_id: string | null;
   timestamp: string;
   coordinates_recalculated?: boolean;
+  vote_count: number;
+  user_has_voted: boolean;
 }
 
 export interface VisualizationResponse {
@@ -179,10 +181,16 @@ export interface DialogueResponse {
 // WebSocket event types
 export type WebSocketEvent =
   | { type: 'idea_created'; data: IdeaVisualization }
+  | { type: 'idea_deleted'; data: { idea_id: string } }
   | { type: 'coordinates_updated'; data: { updates: Array<{ idea_id: string; x: number; y: number; cluster_id: number | null }> } }
   | { type: 'clusters_updated'; data: { clusters: ClusterData[] } }
   | { type: 'clusters_recalculated'; data: {} }
   | { type: 'user_joined'; data: { user_id: string; user_name: string } }
   | { type: 'scoreboard_updated'; data: { rankings: ScoreboardEntry[] } }
   | { type: 'session_status_changed'; data: { status: string; accepting_ideas: boolean } }
+  | { type: 'vote_added'; data: { idea_id: string; vote_count: number; user_has_voted: boolean } }
+  | { type: 'vote_removed'; data: { idea_id: string; vote_count: number; user_has_voted: boolean } }
   | { type: 'pong' };
+
+// Cluster visualization type
+export type ClusterVisualization = ClusterData;

@@ -35,7 +35,7 @@ export const AdminPage = () => {
   // Session management state
   const [sessions, setSessions] = useState<Session[]>([]);
   const [isLoadingSessions, setIsLoadingSessions] = useState(true);
-  const [sessionFilter, setSessionFilter] = useState<'all' | 'active'>('all');
+  const [sessionFilter] = useState<'all' | 'active'>('all'); // Filter state (for future use)
   const [deleteConfirmSessionId, setDeleteConfirmSessionId] = useState<string | null>(null);
   const [deletingSessionId, setDeletingSessionId] = useState<string | null>(null);
   const [exportingSessionId, setExportingSessionId] = useState<string | null>(null);
