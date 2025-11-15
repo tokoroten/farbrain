@@ -1,0 +1,69 @@
+# Render.com deployment configuration
+# https://render.com/docs/blueprint-spec
+
+databases:
+  # PostgreSQL Database
+  - name: farbrain-db
+    plan: free # 1GB free tier
+    databaseName: farbrain
+    user: farbrain_user
+    region: oregon # または singapore (お好みで)
+
+services:
+
+  # FastAPI Backend
+  - type: web
+    name: farbrain-api
+    runtime: python
+    plan: free # 750 hours/month, sleeps after 15 min inactivity
+    region: oregon
+    buildCommand: cd backend && pip install -r requirements.txt
+    startCommand: cd backend && uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: farbrain-db
+          property: connectionString
+      - key: OPENAI_API_KEY
+        sync: false # Set manually in Render dashboard or via gh CLI
+      - key: OPENAI_MODEL
+        value: gpt-4o-mini # Cheaper model for production
+      - key: SECRET_KEY
+        generateValue: true # Auto-generate secure random key
+      - key: ADMIN_PASSWORD
+        sync: false # Set manually
+      - key: CORS_ORIGINS
+        value: https://farbrain.onrender.com,http://localhost:5173
+      - key: DEBUG
+        value: false
+      - key: LOG_LEVEL
+        value: INFO
+    autoDeploy: true # Auto-deploy on git push
+
+  # React Frontend (Static Site)
+  - type: web
+    name: farbrain-frontend
+    runtime: static
+    plan: free
+    region: oregon
+    buildCommand: |
+      cd frontend
+      npm ci
+      npm run build
+    staticPublishPath: frontend/dist
+    pullRequestPreviewsEnabled: true
+    headers:
+      - path: /*
+        name: X-Frame-Options
+        value: SAMEORIGIN
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    envVars:
+      - key: VITE_API_URL
+        value: https://farbrain-api.onrender.com
+      - key: VITE_WS_URL
+        value: wss://farbrain-api.onrender.com
+    autoDeploy: true

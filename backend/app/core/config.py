@@ -34,6 +34,18 @@ class Settings(BaseSettings):
         description="Database connection URL"
     )
 
+    @field_validator("database_url")
+    @classmethod
+    def convert_postgres_url(cls, v: str) -> str:
+        """
+        Convert Render.com PostgreSQL URL to asyncpg format.
+        Render provides: postgresql://user:pass@host:5432/db
+        We need: postgresql+asyncpg://user:pass@host:5432/db
+        """
+        if v and v.startswith("postgresql://"):
+            return v.replace("postgresql://", "postgresql+asyncpg://", 1)
+        return v
+
     # CORS
     cors_origins: str = Field(
         default="http://localhost:5173,http://localhost:5174,http://localhost:3000",
