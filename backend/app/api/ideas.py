@@ -38,6 +38,10 @@ logger = logging.getLogger(__name__)
 # Service instances
 novelty_scorer = NoveltyScorer(min_distance_transform)
 
+# Session-level locks for re-clustering (prevents concurrent re-clustering on same session)
+_recluster_locks: dict[str, asyncio.Lock] = {}
+_recluster_in_progress: set[str] = set()  # Track which sessions are currently re-clustering
+
 
 # Helper functions for create_idea endpoint
 
@@ -476,64 +480,76 @@ async def full_recluster_session(session_id: str) -> None:
     """Background task to fully re-cluster all ideas (UMAP re-fit + label update)."""
     from backend.app.db.base import AsyncSessionLocal
 
-    async with AsyncSessionLocal() as db:
-        try:
-            from backend.app.services.clustering import get_clustering_service
+    # Check if re-clustering is already in progress for this session
+    if session_id in _recluster_in_progress:
+        logger.info(f"[RECLUSTER] Re-clustering already in progress for session {session_id}, skipping")
+        return
 
-            logger.info(f"[RECLUSTER] Starting full re-clustering for session {session_id}")
+    # Mark as in progress
+    _recluster_in_progress.add(session_id)
 
-            # Get session
-            session_result = await db.execute(
-                select(Session).where(Session.id == session_id)
-            )
-            session = session_result.scalar_one_or_none()
-            if not session:
-                logger.error(f"[RECLUSTER] Session {session_id} not found")
-                return
+    try:
+        async with AsyncSessionLocal() as db:
+            try:
+                from backend.app.services.clustering import get_clustering_service
 
-            # Get all ideas
-            ideas_result = await db.execute(
-                select(Idea).where(Idea.session_id == session_id)
-            )
-            ideas = ideas_result.scalars().all()
+                logger.info(f"[RECLUSTER] Starting full re-clustering for session {session_id}")
 
-            if len(ideas) < settings.min_ideas_for_clustering:
-                logger.info(f"[RECLUSTER] Not enough ideas ({len(ideas)}) for clustering")
-                return
+                # Get session
+                session_result = await db.execute(
+                    select(Session).where(Session.id == session_id)
+                )
+                session = session_result.scalar_one_or_none()
+                if not session:
+                    logger.error(f"[RECLUSTER] Session {session_id} not found")
+                    return
 
-            # Get clustering service (DO NOT clear - keep existing instance to avoid race conditions)
-            # fit_transform() will update the internal UMAP and k-means models
-            clustering_service = get_clustering_service(
-                session_id,
-                fixed_cluster_count=session.fixed_cluster_count
-            )
+                # Get all ideas
+                ideas_result = await db.execute(
+                    select(Idea).where(Idea.session_id == session_id)
+                )
+                ideas = ideas_result.scalars().all()
 
-            # Get all embeddings
-            all_embeddings = np.array([np.array(idea.embedding) for idea in ideas])
+                if len(ideas) < settings.min_ideas_for_clustering:
+                    logger.info(f"[RECLUSTER] Not enough ideas ({len(ideas)}) for clustering")
+                    return
 
-            # Perform full clustering (this will fit a new UMAP model)
-            clustering_result = clustering_service.fit_transform(all_embeddings)
+                # Get clustering service (DO NOT clear - keep existing instance to avoid race conditions)
+                # fit_transform() will update the internal UMAP and k-means models
+                clustering_service = get_clustering_service(
+                    session_id,
+                    fixed_cluster_count=session.fixed_cluster_count
+                )
 
-            # Update coordinates and cluster assignments
-            for i, idea in enumerate(ideas):
-                idea.x = float(clustering_result.coordinates[i, 0])
-                idea.y = float(clustering_result.coordinates[i, 1])
-                idea.cluster_id = int(clustering_result.cluster_labels[i])
+                # Get all embeddings
+                all_embeddings = np.array([np.array(idea.embedding) for idea in ideas])
 
-            # Update last_clustered_idea_count on session
-            session.last_clustered_idea_count = len(ideas)
+                # Perform full clustering (this will fit a new UMAP model)
+                clustering_result = clustering_service.fit_transform(all_embeddings)
 
-            await db.commit()
+                # Update coordinates and cluster assignments
+                for i, idea in enumerate(ideas):
+                    idea.x = float(clustering_result.coordinates[i, 0])
+                    idea.y = float(clustering_result.coordinates[i, 1])
+                    idea.cluster_id = int(clustering_result.cluster_labels[i])
 
-            logger.info(f"[RECLUSTER] Re-clustered {len(ideas)} ideas into {clustering_result.n_clusters} clusters, updated last_clustered_idea_count to {len(ideas)}")
+                # Update last_clustered_idea_count on session
+                session.last_clustered_idea_count = len(ideas)
 
-            # Now update cluster labels (this also sends clusters_recalculated via WebSocket)
-            await update_cluster_labels(session_id, db)
+                await db.commit()
 
-            logger.info(f"[RECLUSTER] Full re-clustering complete for session {session_id}")
+                logger.info(f"[RECLUSTER] Re-clustered {len(ideas)} ideas into {clustering_result.n_clusters} clusters, updated last_clustered_idea_count to {len(ideas)}")
 
-        except Exception as e:
-            logger.error(f"[RECLUSTER] Failed to re-cluster session {session_id}: {e}", exc_info=True)
+                # Now update cluster labels (this also sends clusters_recalculated via WebSocket)
+                await update_cluster_labels(session_id, db)
+
+                logger.info(f"[RECLUSTER] Full re-clustering complete for session {session_id}")
+
+            except Exception as e:
+                logger.error(f"[RECLUSTER] Failed to re-cluster session {session_id}: {e}", exc_info=True)
+    finally:
+        # Always remove from in-progress set
+        _recluster_in_progress.discard(session_id)
 
 
 async def update_cluster_labels(session_id: str, db: AsyncSession) -> None:
