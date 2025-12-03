@@ -1,7 +1,6 @@
 """Application configuration."""
 
-from typing import Literal
-from pydantic import Field, field_validator, model_validator
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -63,12 +62,8 @@ class Settings(BaseSettings):
         description="Minimum number of ideas before clustering starts"
     )
     clustering_interval: int = Field(
-        default=10,
+        default=5,
         description="Full re-clustering (UMAP + k-means + LLM labels) every N ideas"
-    )
-    reclustering_interval: int = Field(
-        default=10,
-        description="Full re-clustering interval (same as clustering_interval for consistency)"
     )
     max_clusters: int = Field(
         default=20,
@@ -123,7 +118,7 @@ class Settings(BaseSettings):
             raise ValueError("embedding_dimension must be positive")
         return v
 
-    @field_validator("min_ideas_for_clustering", "clustering_interval", "reclustering_interval")
+    @field_validator("min_ideas_for_clustering", "clustering_interval")
     @classmethod
     def validate_positive_int(cls, v: int) -> int:
         """Validate integer is positive."""
@@ -156,20 +151,6 @@ class Settings(BaseSettings):
         if not 0 <= v <= 1:
             raise ValueError("umap_min_dist must be between 0 and 1")
         return v
-
-    @model_validator(mode="after")
-    def validate_clustering_intervals(self) -> "Settings":
-        """Validate clustering intervals are logically consistent."""
-        if self.clustering_interval > self.reclustering_interval:
-            raise ValueError(
-                "clustering_interval must be less than or equal to reclustering_interval"
-            )
-        if self.min_ideas_for_clustering > self.clustering_interval:
-            raise ValueError(
-                "min_ideas_for_clustering should be less than or equal to clustering_interval"
-            )
-        return self
-
 
 # Global settings instance
 settings = Settings()

@@ -64,11 +64,6 @@ class TestSettingsValidation:
         with pytest.raises(ValidationError, match="Value must be positive"):
             Settings(clustering_interval=0)
 
-    def test_reclustering_interval_positive(self):
-        """Test reclustering_interval must be positive."""
-        with pytest.raises(ValidationError, match="Value must be positive"):
-            Settings(reclustering_interval=0)
-
     def test_max_clusters_minimum(self):
         """Test max_clusters must be at least 2."""
         with pytest.raises(ValidationError, match="max_clusters must be at least 2"):
@@ -130,34 +125,6 @@ class TestSettingsValidation:
 
         settings = Settings(umap_min_dist=1.0)
         assert settings.umap_min_dist == 1.0
-
-    def test_clustering_intervals_logical_consistency(self):
-        """Test clustering_interval must be less than or equal to reclustering_interval."""
-        # Equal values are allowed now
-        settings = Settings(clustering_interval=50, reclustering_interval=50)
-        assert settings.clustering_interval == 50
-        assert settings.reclustering_interval == 50
-
-        # Greater than should fail
-        with pytest.raises(ValidationError, match="clustering_interval must be less than or equal to reclustering_interval"):
-            Settings(clustering_interval=60, reclustering_interval=50)
-
-    def test_clustering_intervals_valid(self):
-        """Test valid clustering interval configuration."""
-        settings = Settings(clustering_interval=10, reclustering_interval=50)
-        assert settings.clustering_interval == 10
-        assert settings.reclustering_interval == 50
-
-    def test_min_ideas_clustering_interval_consistency(self):
-        """Test min_ideas_for_clustering should not exceed clustering_interval."""
-        with pytest.raises(ValidationError, match="min_ideas_for_clustering should be less than or equal to clustering_interval"):
-            Settings(min_ideas_for_clustering=20, clustering_interval=10, reclustering_interval=50)
-
-    def test_min_ideas_clustering_interval_valid(self):
-        """Test valid min_ideas and clustering_interval configuration."""
-        settings = Settings(min_ideas_for_clustering=5, clustering_interval=10, reclustering_interval=50)
-        assert settings.min_ideas_for_clustering == 5
-        assert settings.clustering_interval == 10
 
     def test_cors_origins_list_property(self):
         """Test CORS origins list property parses correctly."""

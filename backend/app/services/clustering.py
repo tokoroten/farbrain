@@ -173,8 +173,7 @@ class ClusteringService:
             n_neighbors=min(self.n_neighbors, n_ideas - 1),
             min_dist=self.min_dist,
             metric="cosine",
-            random_state=self.random_state,
-            n_jobs=-1,  # Use all available CPU cores
+            n_jobs=-1,  # Use all available CPU cores (no random_state for parallelism)
         )
 
         coordinates = self.umap_model.fit_transform(embeddings).astype(np.float64)

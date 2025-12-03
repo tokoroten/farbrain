@@ -527,18 +527,8 @@ async def full_recluster_session(session_id: str) -> None:
 
             logger.info(f"[RECLUSTER] Re-clustered {len(ideas)} ideas into {clustering_result.n_clusters} clusters, updated last_clustered_idea_count to {len(ideas)}")
 
-            # Now update cluster labels
+            # Now update cluster labels (this also sends clusters_recalculated via WebSocket)
             await update_cluster_labels(session_id, db)
-
-            # Broadcast reclustering complete via WebSocket
-            await manager.broadcast_to_session(
-                session_id=session_id,
-                message={
-                    "type": "reclustering_complete",
-                    "cluster_count": clustering_result.n_clusters,
-                    "idea_count": len(ideas),
-                }
-            )
 
             logger.info(f"[RECLUSTER] Full re-clustering complete for session {session_id}")
 

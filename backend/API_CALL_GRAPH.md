@@ -122,18 +122,20 @@ POST /api/ideas
   │       backend/app/websocket/manager.py
   │       └─ broadcast_to_session(session_id, message)
   │
-  └─ 定期クラスタリング・ラベル更新 (Line 222-232)
-      ├─ new_total % reclustering_interval == 0 (50個ごと)
-      │   └─ asyncio.create_task(full_recluster_session(session_id, db))
-      │       backend/app/api/ideas.py:252
-      │       ↓
-      │       ├─ get_clustering_service(session_id, ...)
-      │       ├─ clustering_result = clustering_service.fit_transform(all_embeddings)
-      │       ├─ 全アイディアの座標・クラスタを更新
-      │       └─ update_cluster_labels(session_id, db)
-      │
-      └─ new_total % clustering_interval == 0 (10個ごと)
-          └─ asyncio.create_task(update_cluster_labels(session_id, db))
+  └─ 定期クラスタリング・ラベル更新
+      └─ ideas_since_last_cluster >= settings.clustering_interval (5個ごと)
+          └─ asyncio.create_task(full_recluster_session(session_id))
+              backend/app/api/ideas.py
+              ↓
+              ├─ AsyncSessionLocal()で独自DBセッション作成
+              ├─ get_clustering_service(session_id, ...)
+              ├─ clustering_result = clustering_service.fit_transform(all_embeddings)
+              │   └─ UMAP + K-means を同時実行
+              ├─ 全アイディアの座標・クラスタを更新
+              ├─ update_cluster_labels(session_id, db)
+              │   └─ LLMでクラスタラベル生成
+              ├─ session.last_clustered_idea_count = actual_total
+              └─ WebSocket: clusters_recalculated イベント送信
 ```
 
 ## 2. グローバル変数とキャッシュ
