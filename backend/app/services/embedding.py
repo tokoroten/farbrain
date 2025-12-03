@@ -9,6 +9,7 @@ from typing import Any
 import numpy as np
 from functools import lru_cache
 import asyncio
+import threading
 from concurrent.futures import ThreadPoolExecutor
 
 from sentence_transformers import SentenceTransformer
@@ -43,12 +44,13 @@ class EmbeddingService:
         """
         self.model_name = model_name or settings.embedding_model
         self._model: SentenceTransformer | None = None
+        self._model_lock = threading.Lock()  # Thread lock for lazy model loading
         self._executor = ThreadPoolExecutor(max_workers=2)
 
     @property
     def model(self) -> SentenceTransformer:
         """
-        Lazy load Sentence Transformers model.
+        Lazy load Sentence Transformers model (thread-safe).
 
         Returns:
             Loaded SentenceTransformer model
@@ -56,17 +58,21 @@ class EmbeddingService:
         Note:
             Model is loaded on first access and cached.
             First load may take time to download model.
+            Uses thread lock to prevent concurrent loading.
         """
         if self._model is None:
-            self._model = SentenceTransformer(self.model_name)
-            # Move to GPU if available
-            if hasattr(self._model, 'to'):
-                try:
-                    import torch
-                    if torch.cuda.is_available():
-                        self._model = self._model.to('cuda')
-                except ImportError:
-                    pass
+            with self._model_lock:
+                # Double-check after acquiring lock
+                if self._model is None:
+                    self._model = SentenceTransformer(self.model_name)
+                    # Move to GPU if available
+                    if hasattr(self._model, 'to'):
+                        try:
+                            import torch
+                            if torch.cuda.is_available():
+                                self._model = self._model.to('cuda')
+                        except ImportError:
+                            pass
         return self._model
 
     def _preprocess_text(self, text: str) -> str:
