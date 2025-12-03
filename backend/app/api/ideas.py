@@ -304,33 +304,19 @@ async def create_idea(
         logger.info(f"[IDEA-CREATE] Processing idea #{n_existing + 1} for session {idea_data.session_id}")
         logger.info(f"[IDEA-CREATE] Clustering service UMAP model status: {'EXISTS' if clustering_service.umap_model is not None else 'NONE'}")
 
-        # If model is not fitted (e.g., after server restart), re-cluster everything
+        # If model is not fitted (e.g., after server restart), assign random coordinates
+        # and trigger full_recluster_session (which has proper locking)
         if clustering_service.umap_model is None:
-            logger.warning(f"[IDEA-CREATE] UMAP model not found for session {idea_data.session_id}. Re-clustering all ideas...")
+            logger.warning(f"[IDEA-CREATE] UMAP model not found for session {idea_data.session_id}. Assigning random coordinates and triggering re-clustering...")
 
-            # Get all existing ideas + new embedding
-            all_embeddings = np.vstack([existing_embeddings, embedding.reshape(1, -1)])
-            logger.info(f"[IDEA-CREATE] Re-clustering {len(all_embeddings)} ideas (including new one)")
+            # Assign random coordinates (will be updated by full_recluster_session)
+            x = float(np.random.uniform(-10, 10))
+            y = float(np.random.uniform(-10, 10))
+            cluster_id = 0  # Temporary cluster, will be updated by re-clustering
 
-            clustering_result = clustering_service.fit_transform(all_embeddings)
+            logger.info(f"[IDEA-CREATE] Assigned temporary random coordinates: ({x:.4f}, {y:.4f})")
 
-            # Get coordinates for new idea (last one)
-            x = float(clustering_result.coordinates[-1, 0])
-            y = float(clustering_result.coordinates[-1, 1])
-            cluster_id = int(clustering_result.cluster_labels[-1])
-
-            logger.info(f"[IDEA-CREATE] New idea coordinates after re-clustering: ({x:.4f}, {y:.4f}), cluster={cluster_id}")
-
-            # Update coordinates for all existing ideas
-            for i, idea in enumerate(existing_ideas):
-                idea.x = float(clustering_result.coordinates[i, 0])
-                idea.y = float(clustering_result.coordinates[i, 1])
-                idea.cluster_id = int(clustering_result.cluster_labels[i])
-
-            logger.info(f"[IDEA-CREATE] Re-clustering complete. Updated {len(existing_ideas)} existing ideas.")
-
-            # Mark that we need to update clusters after creating the new idea
-            need_cluster_update = True
+            # Mark that coordinates need to be recalculated (triggers full_recluster_session later)
             coordinates_recalculated = True
         else:
             # Normal case: transform using existing model
@@ -453,9 +439,15 @@ async def create_idea(
     logger.info(f"[IDEA-CREATE] Actual idea count: {actual_total}, last clustered at: {session.last_clustered_idea_count}, ideas since: {ideas_since_last_cluster}")
 
     if actual_total >= settings.min_ideas_for_clustering:
-        # Trigger re-clustering if enough ideas have been added since last clustering
-        if ideas_since_last_cluster >= settings.clustering_interval:
-            logger.info(f"[IDEA-CREATE] Triggering full re-clustering ({ideas_since_last_cluster} ideas since last clustering)")
+        # Trigger re-clustering if:
+        # 1. Enough ideas have been added since last clustering, OR
+        # 2. UMAP model doesn't exist (server restart case - coordinates_recalculated is True)
+        should_recluster = (
+            ideas_since_last_cluster >= settings.clustering_interval or
+            (coordinates_recalculated and clustering_service.umap_model is None)
+        )
+        if should_recluster:
+            logger.info(f"[IDEA-CREATE] Triggering full re-clustering (ideas_since_last_cluster={ideas_since_last_cluster}, umap_exists={clustering_service.umap_model is not None})")
             asyncio.create_task(
                 full_recluster_session(str(idea_data.session_id))
             )
