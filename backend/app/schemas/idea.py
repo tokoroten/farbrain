@@ -57,3 +57,42 @@ class IdeaDelete(BaseModel):
 
     user_id: UUID = Field(..., description="User ID requesting deletion")
     admin_password: str | None = Field(None, description="Admin password for deleting other users' ideas")
+
+
+class IdeaBatchItem(BaseModel):
+    """Schema for a single idea in a batch submission."""
+
+    raw_text: str = Field(
+        ...,
+        min_length=1,
+        max_length=2000,
+        description="User's raw input"
+    )
+    skip_formatting: bool = Field(
+        False,
+        description="Skip LLM formatting and use raw text directly"
+    )
+    formatted_text: str | None = Field(
+        None,
+        description="Pre-formatted text (e.g., from variation generation)"
+    )
+
+
+class IdeaBatchCreate(BaseModel):
+    """Schema for batch creating multiple ideas."""
+
+    session_id: UUID = Field(..., description="Target session ID")
+    user_id: UUID = Field(..., description="Session-specific user ID")
+    ideas: list[IdeaBatchItem] = Field(
+        ...,
+        min_length=1,
+        max_length=50,
+        description="List of ideas to create (max 50)"
+    )
+
+
+class IdeaBatchResponse(BaseModel):
+    """Schema for batch idea creation response."""
+
+    created: list[IdeaResponse] = Field(..., description="List of created ideas")
+    total: int = Field(..., description="Total number of ideas created")

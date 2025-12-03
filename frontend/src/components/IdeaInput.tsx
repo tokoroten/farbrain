@@ -6,8 +6,15 @@ import { useState, useRef, useEffect } from 'react';
 import { api } from '../lib/api';
 import { getApiUrl } from '../lib/config';
 
+interface BatchItem {
+  raw_text: string;
+  skip_formatting?: boolean;
+  formatted_text?: string;
+}
+
 interface Props {
   onSubmit: (text: string, skipFormatting?: boolean, formattedText?: string) => Promise<void>;
+  onBatchSubmit?: (items: BatchItem[]) => Promise<void>;
   sessionId?: string;
   enableDialogueMode?: boolean;
   enableVariationMode?: boolean;
@@ -15,7 +22,7 @@ interface Props {
 
 type InputMode = 'direct' | 'dialogue' | 'variation';
 
-export const IdeaInput = ({ onSubmit, sessionId, enableDialogueMode = true, enableVariationMode = true }: Props) => {
+export const IdeaInput = ({ onSubmit, onBatchSubmit, sessionId, enableDialogueMode = true, enableVariationMode = true }: Props) => {
   const [text, setText] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -272,23 +279,37 @@ export const IdeaInput = ({ onSubmit, sessionId, enableDialogueMode = true, enab
     setError(null);
 
     try {
-      const submitPromises = [];
+      // Build batch items
+      const batchItems: BatchItem[] = [];
 
-      // Submit original text if selected
+      // Add original text if selected
       if (isOriginalSelected && originalText) {
-        submitPromises.push(onSubmit(originalText, true)); // skip_formatting = true
+        batchItems.push({
+          raw_text: originalText,
+          skip_formatting: true, // skip_formatting = true
+        });
       }
 
-      // Submit all selected variations in parallel
+      // Add all selected variations
       // raw_text = originalText (拡張前の原文)
       // formatted_text = variation (拡張後のテキスト)
-      submitPromises.push(
-        ...Array.from(selectedVariations).map(index =>
-          onSubmit(originalText, false, variations[index]) // raw_text=originalText, formatted_text=variation
-        )
-      );
+      for (const index of selectedVariations) {
+        batchItems.push({
+          raw_text: originalText,
+          skip_formatting: false,
+          formatted_text: variations[index],
+        });
+      }
 
-      await Promise.all(submitPromises);
+      // Use batch submission if available, otherwise fall back to sequential
+      if (onBatchSubmit) {
+        await onBatchSubmit(batchItems);
+      } else {
+        // Fallback: sequential submission (safer but slower)
+        for (const item of batchItems) {
+          await onSubmit(item.raw_text, item.skip_formatting, item.formatted_text);
+        }
+      }
 
       // Reset variation data but stay in variation mode
       setText('');

@@ -245,6 +245,22 @@ export const BrainstormSession = () => {
     }
   };
 
+  const handleBatchSubmit = async (items: Array<{ raw_text: string; skip_formatting?: boolean; formatted_text?: string }>) => {
+    if (!sessionId || !userId) return;
+
+    try {
+      await api.ideas.createBatch({
+        session_id: sessionId,
+        user_id: userId,
+        ideas: items,
+      });
+      // Ideas will be added via WebSocket
+    } catch (err) {
+      console.error('Failed to batch submit ideas:', err);
+      throw err;
+    }
+  };
+
   const handleDeleteIdea = async (ideaId: string, adminPassword?: string) => {
     if (!userId) return;
 
@@ -677,6 +693,7 @@ export const BrainstormSession = () => {
             }}>
               <IdeaInput
                 onSubmit={handleIdeaSubmit}
+                onBatchSubmit={handleBatchSubmit}
                 sessionId={sessionId}
                 enableDialogueMode={session?.enable_dialogue_mode ?? true}
                 enableVariationMode={session?.enable_variation_mode ?? true}

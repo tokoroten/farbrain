@@ -22,7 +22,7 @@ from backend.app.models.cluster import Cluster
 from backend.app.models.idea import Idea
 from backend.app.models.session import Session
 from backend.app.models.user import User
-from backend.app.schemas.idea import IdeaCreate, IdeaListResponse, IdeaResponse, IdeaDelete
+from backend.app.schemas.idea import IdeaCreate, IdeaListResponse, IdeaResponse, IdeaDelete, IdeaBatchCreate, IdeaBatchResponse
 from backend.app.services.clustering import get_clustering_service
 from backend.app.services.embedding import EmbeddingService, get_embedding_service
 from backend.app.services.llm import LLMService, get_llm_service
@@ -428,6 +428,177 @@ async def create_idea(
         novelty_score=idea.novelty_score,
         closest_idea_id=idea.closest_idea_id,
         timestamp=idea.timestamp,
+    )
+
+
+@router.post("/batch", response_model=IdeaBatchResponse, status_code=status.HTTP_201_CREATED)
+async def create_ideas_batch(
+    batch_data: IdeaBatchCreate,
+    db: AsyncSession = Depends(get_db),
+) -> IdeaBatchResponse:
+    """
+    Create multiple ideas in a single request (batch submission).
+
+    This endpoint processes ideas sequentially to avoid race conditions
+    that occur with parallel submissions. Use this for AI variations
+    or bulk imports instead of multiple parallel POST /api/ideas calls.
+
+    Processing:
+    1. All ideas are processed sequentially in order
+    2. Each idea gets proper embedding, novelty score, and coordinates
+    3. Clustering is triggered once at the end (not after each idea)
+    4. All ideas are committed in a single transaction
+    """
+    logger.info(f"[BATCH-CREATE] Starting batch creation of {len(batch_data.ideas)} ideas")
+
+    # Step 1: Verify session and user
+    session, user = await _verify_session_and_user(
+        str(batch_data.session_id),
+        str(batch_data.user_id),
+        db
+    )
+
+    # Check if session is accepting new ideas
+    if not session.accepting_ideas:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="このセッションは停止されているため、新しいアイデアを投稿できません"
+        )
+
+    # Get session-specific clustering service
+    clustering_service = get_clustering_service(
+        str(batch_data.session_id),
+        fixed_cluster_count=session.fixed_cluster_count
+    )
+
+    created_ideas: list[Idea] = []
+
+    # Process each idea sequentially
+    for i, idea_item in enumerate(batch_data.ideas):
+        logger.info(f"[BATCH-CREATE] Processing idea {i + 1}/{len(batch_data.ideas)}")
+
+        # Get existing ideas (including ones created in this batch)
+        existing_ideas_result = await db.execute(
+            select(Idea).where(Idea.session_id == str(batch_data.session_id))
+        )
+        existing_ideas = list(existing_ideas_result.scalars().all()) + created_ideas
+        n_existing = len(existing_ideas)
+
+        # Format text and generate embedding
+        formatted_text, embedding = await _format_and_embed_text(
+            idea_item.raw_text,
+            idea_item.skip_formatting,
+            session,
+            existing_ideas,
+            preformatted_text=idea_item.formatted_text
+        )
+        embedding_list = embedding.tolist()
+
+        # Calculate novelty score and find closest idea
+        novelty_score, closest_idea_id = _calculate_novelty_and_closest(
+            embedding,
+            existing_ideas,
+            str(batch_data.user_id),
+            session.penalize_self_similarity
+        )
+
+        # Assign coordinates (random for now, will be fixed by clustering)
+        if clustering_service.umap_model is not None:
+            x, y = clustering_service.transform(embedding)
+            cluster_id = clustering_service.predict_cluster((x, y))
+        else:
+            x = float(np.random.uniform(-10, 10))
+            y = float(np.random.uniform(-10, 10))
+            cluster_id = 0 if n_existing >= settings.min_ideas_for_clustering - 1 else None
+
+        # Create idea
+        idea = Idea(
+            session_id=str(batch_data.session_id),
+            user_id=str(batch_data.user_id),
+            raw_text=idea_item.raw_text,
+            formatted_text=formatted_text,
+            embedding=embedding_list,
+            x=x,
+            y=y,
+            cluster_id=cluster_id,
+            novelty_score=novelty_score,
+            closest_idea_id=closest_idea_id,
+        )
+
+        db.add(idea)
+        created_ideas.append(idea)
+
+        # Update user score and count
+        user.total_score += novelty_score
+        user.idea_count += 1
+
+    # Commit all ideas in single transaction
+    await db.commit()
+
+    # Refresh all ideas to get IDs
+    for idea in created_ideas:
+        await db.refresh(idea)
+
+    await db.refresh(user)
+
+    logger.info(f"[BATCH-CREATE] Created {len(created_ideas)} ideas, sending WebSocket notifications")
+
+    # Send WebSocket notifications for each created idea
+    for idea in created_ideas:
+        await manager.send_idea_created(
+            session_id=batch_data.session_id,
+            idea_id=idea.id,
+            user_id=idea.user_id,
+            user_name=user.name,
+            formatted_text=idea.formatted_text,
+            raw_text=idea.raw_text,
+            x=idea.x,
+            y=idea.y,
+            cluster_id=idea.cluster_id,
+            novelty_score=idea.novelty_score,
+            closest_idea_id=idea.closest_idea_id,
+            timestamp=idea.timestamp.isoformat(),
+            coordinates_recalculated=False,
+        )
+
+    # Get actual idea count after batch
+    actual_count_result = await db.execute(
+        select(Idea).where(Idea.session_id == str(batch_data.session_id))
+    )
+    actual_total = len(actual_count_result.scalars().all())
+
+    # Trigger full re-clustering if we have enough ideas
+    await db.refresh(session)
+    if actual_total >= settings.min_ideas_for_clustering:
+        logger.info(f"[BATCH-CREATE] Triggering full re-clustering after batch (total ideas: {actual_total})")
+        asyncio.create_task(
+            full_recluster_session(str(batch_data.session_id))
+        )
+
+    # Build response
+    idea_responses = [
+        IdeaResponse(
+            id=idea.id,
+            session_id=idea.session_id,
+            user_id=idea.user_id,
+            user_name=user.name,
+            raw_text=idea.raw_text,
+            formatted_text=idea.formatted_text,
+            x=idea.x,
+            y=idea.y,
+            cluster_id=idea.cluster_id,
+            novelty_score=idea.novelty_score,
+            closest_idea_id=idea.closest_idea_id,
+            timestamp=idea.timestamp,
+        )
+        for idea in created_ideas
+    ]
+
+    logger.info(f"[BATCH-CREATE] Batch creation complete: {len(idea_responses)} ideas")
+
+    return IdeaBatchResponse(
+        created=idea_responses,
+        total=len(idea_responses)
     )
 
 

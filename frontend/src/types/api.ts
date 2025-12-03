@@ -97,6 +97,23 @@ export interface IdeaCreateRequest {
   formatted_text?: string;  // Pre-formatted text (e.g., from variation generation)
 }
 
+export interface IdeaBatchItem {
+  raw_text: string;
+  skip_formatting?: boolean;
+  formatted_text?: string;
+}
+
+export interface IdeaBatchCreateRequest {
+  session_id: string;
+  user_id: string;
+  ideas: IdeaBatchItem[];
+}
+
+export interface IdeaBatchResponse {
+  created: Idea[];
+  total: number;
+}
+
 export interface IdeaListResponse {
   ideas: Idea[];
   total: number;

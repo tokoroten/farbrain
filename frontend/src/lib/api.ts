@@ -16,6 +16,8 @@ import type {
   UserRegisterResponse,
   Idea,
   IdeaCreateRequest,
+  IdeaBatchCreateRequest,
+  IdeaBatchResponse,
   IdeaListResponse,
   VisualizationResponse,
   ScoreboardResponse,
@@ -116,6 +118,11 @@ export const api = {
   ideas: {
     create: async (data: IdeaCreateRequest): Promise<Idea> => {
       const response = await apiClient.post('/api/ideas/', data);
+      return response.data;
+    },
+
+    createBatch: async (data: IdeaBatchCreateRequest): Promise<IdeaBatchResponse> => {
+      const response = await apiClient.post('/api/ideas/batch', data);
       return response.data;
     },
 
