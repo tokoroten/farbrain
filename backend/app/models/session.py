@@ -71,6 +71,7 @@ class Session(Base):
     enable_dialogue_mode: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     enable_variation_mode: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     penalize_self_similarity: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    last_clustered_idea_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     created_at: Mapped[datetime] = mapped_column(
         DateTime,
         nullable=False,

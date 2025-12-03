@@ -436,15 +436,24 @@ async def create_idea(
         coordinates_recalculated=coordinates_recalculated,
     )
 
-    # Step 6: Trigger full re-clustering every 10 ideas
-    new_total = n_existing + 1
-    if new_total >= settings.min_ideas_for_clustering:
-        # Full re-clustering (UMAP + k-means + LLM labels) every clustering_interval ideas
-        # This includes the initial clustering at idea #10, #20, #30, etc.
-        if new_total % settings.clustering_interval == 0 or new_total == settings.min_ideas_for_clustering:
-            logger.info(f"[IDEA-CREATE] Triggering full re-clustering (UMAP + k-means + LLM labels) at {new_total} ideas")
+    # Step 6: Trigger full re-clustering based on ideas since last clustering
+    # Re-fetch actual idea count and session from DB after commit (important for parallel submissions)
+    actual_count_result = await db.execute(
+        select(Idea).where(Idea.session_id == str(idea_data.session_id))
+    )
+    actual_total = len(actual_count_result.scalars().all())
+
+    # Re-fetch session to get latest last_clustered_idea_count
+    await db.refresh(session)
+    ideas_since_last_cluster = actual_total - session.last_clustered_idea_count
+    logger.info(f"[IDEA-CREATE] Actual idea count: {actual_total}, last clustered at: {session.last_clustered_idea_count}, ideas since: {ideas_since_last_cluster}")
+
+    if actual_total >= settings.min_ideas_for_clustering:
+        # Trigger re-clustering if enough ideas have been added since last clustering
+        if ideas_since_last_cluster >= settings.clustering_interval:
+            logger.info(f"[IDEA-CREATE] Triggering full re-clustering ({ideas_since_last_cluster} ideas since last clustering)")
             asyncio.create_task(
-                full_recluster_session(idea_data.session_id, db)
+                full_recluster_session(str(idea_data.session_id))
             )
 
     return IdeaResponse(
@@ -463,72 +472,78 @@ async def create_idea(
     )
 
 
-async def full_recluster_session(session_id: str, db: AsyncSession) -> None:
+async def full_recluster_session(session_id: str) -> None:
     """Background task to fully re-cluster all ideas (UMAP re-fit + label update)."""
-    try:
-        from backend.app.services.clustering import get_clustering_service
+    from backend.app.db.base import AsyncSessionLocal
 
-        logger.info(f"[RECLUSTER] Starting full re-clustering for session {session_id}")
+    async with AsyncSessionLocal() as db:
+        try:
+            from backend.app.services.clustering import get_clustering_service
 
-        # Get session
-        session_result = await db.execute(
-            select(Session).where(Session.id == session_id)
-        )
-        session = session_result.scalar_one_or_none()
-        if not session:
-            logger.error(f"[RECLUSTER] Session {session_id} not found")
-            return
+            logger.info(f"[RECLUSTER] Starting full re-clustering for session {session_id}")
 
-        # Get all ideas
-        ideas_result = await db.execute(
-            select(Idea).where(Idea.session_id == session_id)
-        )
-        ideas = ideas_result.scalars().all()
+            # Get session
+            session_result = await db.execute(
+                select(Session).where(Session.id == session_id)
+            )
+            session = session_result.scalar_one_or_none()
+            if not session:
+                logger.error(f"[RECLUSTER] Session {session_id} not found")
+                return
 
-        if len(ideas) < settings.min_ideas_for_clustering:
-            logger.info(f"[RECLUSTER] Not enough ideas ({len(ideas)}) for clustering")
-            return
+            # Get all ideas
+            ideas_result = await db.execute(
+                select(Idea).where(Idea.session_id == session_id)
+            )
+            ideas = ideas_result.scalars().all()
 
-        # Get clustering service (DO NOT clear - keep existing instance to avoid race conditions)
-        # fit_transform() will update the internal UMAP and k-means models
-        clustering_service = get_clustering_service(
-            session_id,
-            fixed_cluster_count=session.fixed_cluster_count
-        )
+            if len(ideas) < settings.min_ideas_for_clustering:
+                logger.info(f"[RECLUSTER] Not enough ideas ({len(ideas)}) for clustering")
+                return
 
-        # Get all embeddings
-        all_embeddings = np.array([np.array(idea.embedding) for idea in ideas])
+            # Get clustering service (DO NOT clear - keep existing instance to avoid race conditions)
+            # fit_transform() will update the internal UMAP and k-means models
+            clustering_service = get_clustering_service(
+                session_id,
+                fixed_cluster_count=session.fixed_cluster_count
+            )
 
-        # Perform full clustering (this will fit a new UMAP model)
-        clustering_result = clustering_service.fit_transform(all_embeddings)
+            # Get all embeddings
+            all_embeddings = np.array([np.array(idea.embedding) for idea in ideas])
 
-        # Update coordinates and cluster assignments
-        for i, idea in enumerate(ideas):
-            idea.x = float(clustering_result.coordinates[i, 0])
-            idea.y = float(clustering_result.coordinates[i, 1])
-            idea.cluster_id = int(clustering_result.cluster_labels[i])
+            # Perform full clustering (this will fit a new UMAP model)
+            clustering_result = clustering_service.fit_transform(all_embeddings)
 
-        await db.commit()
+            # Update coordinates and cluster assignments
+            for i, idea in enumerate(ideas):
+                idea.x = float(clustering_result.coordinates[i, 0])
+                idea.y = float(clustering_result.coordinates[i, 1])
+                idea.cluster_id = int(clustering_result.cluster_labels[i])
 
-        logger.info(f"[RECLUSTER] Re-clustered {len(ideas)} ideas into {clustering_result.n_clusters} clusters")
+            # Update last_clustered_idea_count on session
+            session.last_clustered_idea_count = len(ideas)
 
-        # Now update cluster labels
-        await update_cluster_labels(session_id, db)
+            await db.commit()
 
-        # Broadcast reclustering complete via WebSocket
-        await manager.broadcast_to_session(
-            session_id=session_id,
-            message={
-                "type": "reclustering_complete",
-                "cluster_count": clustering_result.n_clusters,
-                "idea_count": len(ideas),
-            }
-        )
+            logger.info(f"[RECLUSTER] Re-clustered {len(ideas)} ideas into {clustering_result.n_clusters} clusters, updated last_clustered_idea_count to {len(ideas)}")
 
-        logger.info(f"[RECLUSTER] Full re-clustering complete for session {session_id}")
+            # Now update cluster labels
+            await update_cluster_labels(session_id, db)
 
-    except Exception as e:
-        logger.error(f"[RECLUSTER] Failed to re-cluster session {session_id}: {e}", exc_info=True)
+            # Broadcast reclustering complete via WebSocket
+            await manager.broadcast_to_session(
+                session_id=session_id,
+                message={
+                    "type": "reclustering_complete",
+                    "cluster_count": clustering_result.n_clusters,
+                    "idea_count": len(ideas),
+                }
+            )
+
+            logger.info(f"[RECLUSTER] Full re-clustering complete for session {session_id}")
+
+        except Exception as e:
+            logger.error(f"[RECLUSTER] Failed to re-cluster session {session_id}: {e}", exc_info=True)
 
 
 async def update_cluster_labels(session_id: str, db: AsyncSession) -> None:
@@ -630,34 +645,14 @@ async def update_cluster_labels(session_id: str, db: AsyncSession) -> None:
 
         await db.commit()
 
-        # Broadcast cluster updates via WebSocket
-        cluster_data = [
-            {
-                "id": cluster_id,
-                "label": cluster.label,
-                "convex_hull": cluster.convex_hull_points,
-                "idea_count": cluster.idea_count,
-                "avg_novelty_score": cluster.avg_novelty_score,
-            }
-            for cluster_id, cluster in cluster_ideas.items()
-        ]
-        await manager.send_clusters_updated(session_id, cluster_data)
-
-        # Broadcast coordinate updates (ideas were repositioned)
-        coordinate_updates = [
-            {
-                "idea_id": str(idea.id),
-                "x": idea.x,
-                "y": idea.y,
-                "cluster_id": idea.cluster_id,
-            }
-            for idea in ideas
-        ]
-        await manager.send_coordinates_updated(session_id, coordinate_updates)
+        # Broadcast clusters_recalculated event to trigger frontend to fetch fresh data from API
+        # This ensures data format consistency (single source of truth from API)
+        logger.info(f"[CLUSTER-LABELS] Broadcasting clusters_recalculated event to session {session_id}")
+        await manager.send_clusters_recalculated(session_id)
 
     except Exception as e:
         # Log error but don't fail the main request
-        print(f"Error updating cluster labels: {e}")
+        logger.error(f"[CLUSTER-LABELS] Error updating cluster labels for session {session_id}: {e}", exc_info=True)
 
 
 @router.get("/{session_id}", response_model=IdeaListResponse)
