@@ -39,8 +39,7 @@ logger = logging.getLogger(__name__)
 novelty_scorer = NoveltyScorer(min_distance_transform)
 
 # Session-level locks for re-clustering (prevents concurrent re-clustering on same session)
-_recluster_locks: dict[str, asyncio.Lock] = {}
-_recluster_in_progress: set[str] = set()  # Track which sessions are currently re-clustering
+_recluster_locks: dict[str, asyncio.Lock] = {}  # Per-session async locks
 
 
 # Helper functions for create_idea endpoint
@@ -436,15 +435,18 @@ async def full_recluster_session(session_id: str) -> None:
     """Background task to fully re-cluster all ideas (UMAP re-fit + label update)."""
     from backend.app.db.base import AsyncSessionLocal
 
-    # Check if re-clustering is already in progress for this session
-    if session_id in _recluster_in_progress:
+    # Get or create lock for this session
+    if session_id not in _recluster_locks:
+        _recluster_locks[session_id] = asyncio.Lock()
+
+    lock = _recluster_locks[session_id]
+
+    # Try to acquire lock without waiting (non-blocking)
+    if lock.locked():
         logger.info(f"[RECLUSTER] Re-clustering already in progress for session {session_id}, skipping")
         return
 
-    # Mark as in progress
-    _recluster_in_progress.add(session_id)
-
-    try:
+    async with lock:
         async with AsyncSessionLocal() as db:
             try:
                 from backend.app.services.clustering import get_clustering_service
@@ -503,9 +505,6 @@ async def full_recluster_session(session_id: str) -> None:
 
             except Exception as e:
                 logger.error(f"[RECLUSTER] Failed to re-cluster session {session_id}: {e}", exc_info=True)
-    finally:
-        # Always remove from in-progress set
-        _recluster_in_progress.discard(session_id)
 
 
 async def update_cluster_labels(session_id: str, db: AsyncSession) -> None:
