@@ -3,7 +3,7 @@
 import asyncio
 import logging
 import math
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import numpy as np
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
@@ -513,7 +513,7 @@ async def create_ideas_batch(
 
         # Create idea with explicit id (needed for batch processing to reference uncommitted ideas)
         idea = Idea(
-            id=str(uuid.uuid4()),
+            id=str(uuid4()),
             session_id=str(batch_data.session_id),
             user_id=str(batch_data.user_id),
             raw_text=idea_item.raw_text,
