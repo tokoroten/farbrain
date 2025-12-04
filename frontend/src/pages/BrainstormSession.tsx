@@ -224,6 +224,16 @@ export const BrainstormSession = () => {
           )
         );
         break;
+
+      case 'clustering_started':
+        console.log('Clustering started');
+        setClusteringInProgress(true);
+        break;
+
+      case 'clustering_completed':
+        console.log('Clustering completed');
+        setClusteringInProgress(false);
+        break;
     }
   }
 
@@ -459,6 +469,29 @@ export const BrainstormSession = () => {
             }}>
               {isConnected ? '接続中' : '切断'}
             </span>
+            {clusteringInProgress && (
+              <span style={{
+                padding: '0.125rem 0.5rem',
+                borderRadius: '0.25rem',
+                background: '#fff3cd',
+                color: '#856404',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.25rem',
+              }}>
+                <span style={{
+                  display: 'inline-block',
+                  width: '0.75rem',
+                  height: '0.75rem',
+                  border: '2px solid #856404',
+                  borderTopColor: 'transparent',
+                  borderRadius: '50%',
+                  animation: 'spin 1s linear infinite',
+                }}>
+                </span>
+                クラスタリング中...
+              </span>
+            )}
           </div>
         </div>
         <div style={{ position: 'relative' }}>

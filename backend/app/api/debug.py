@@ -464,6 +464,9 @@ async def force_cluster(
     _clustering_locks[data.session_id] = True
     logger.info(f"[FORCE-CLUSTER] Acquired clustering lock for session {data.session_id}")
 
+    # Notify clients that clustering has started
+    await manager.send_clustering_started(data.session_id)
+
     try:
         # Verify session
         session_result = await db.execute(
@@ -572,6 +575,8 @@ async def force_cluster(
         # Always release the lock
         _clustering_locks[data.session_id] = False
         logger.info(f"[FORCE-CLUSTER] Released clustering lock for session {data.session_id}")
+        # Notify clients that clustering has completed
+        await manager.send_clustering_completed(data.session_id)
 
 
 @router.post("/create-test-session", status_code=status.HTTP_201_CREATED)

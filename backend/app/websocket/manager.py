@@ -175,6 +175,28 @@ class ConnectionManager:
         }
         await self.broadcast_to_session(session_id, message)
 
+    async def send_clustering_started(
+        self,
+        session_id: str | UUID,
+    ) -> None:
+        """Broadcast that clustering has started."""
+        message = {
+            "type": "clustering_started",
+            "data": {},
+        }
+        await self.broadcast_to_session(session_id, message)
+
+    async def send_clustering_completed(
+        self,
+        session_id: str | UUID,
+    ) -> None:
+        """Broadcast that clustering has completed."""
+        message = {
+            "type": "clustering_completed",
+            "data": {},
+        }
+        await self.broadcast_to_session(session_id, message)
+
 
 # Global connection manager instance
 manager = ConnectionManager()

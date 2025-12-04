@@ -202,6 +202,8 @@ export type WebSocketEvent =
   | { type: 'coordinates_updated'; data: { updates: Array<{ idea_id: string; x: number; y: number; cluster_id: number | null }> } }
   | { type: 'clusters_updated'; data: { clusters: ClusterData[] } }
   | { type: 'clusters_recalculated'; data: {} }
+  | { type: 'clustering_started'; data: {} }
+  | { type: 'clustering_completed'; data: {} }
   | { type: 'user_joined'; data: { user_id: string; user_name: string } }
   | { type: 'scoreboard_updated'; data: { rankings: ScoreboardEntry[] } }
   | { type: 'session_status_changed'; data: { status: string; accepting_ideas: boolean } }

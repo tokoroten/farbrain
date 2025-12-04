@@ -619,6 +619,9 @@ async def full_recluster_session(session_id: str) -> None:
         return
 
     async with lock:
+        # Notify clients that clustering has started
+        await manager.send_clustering_started(session_id)
+
         async with AsyncSessionLocal() as db:
             try:
                 from backend.app.services.clustering import get_clustering_service
@@ -677,6 +680,9 @@ async def full_recluster_session(session_id: str) -> None:
 
             except Exception as e:
                 logger.error(f"[RECLUSTER] Failed to re-cluster session {session_id}: {e}", exc_info=True)
+            finally:
+                # Always notify clients that clustering has completed (or failed)
+                await manager.send_clustering_completed(session_id)
 
 
 async def update_cluster_labels(session_id: str, db: AsyncSession) -> None:
