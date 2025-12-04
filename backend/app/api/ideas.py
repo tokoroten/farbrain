@@ -511,8 +511,9 @@ async def create_ideas_batch(
             y = float(np.random.uniform(-10, 10))
             cluster_id = 0 if n_existing >= settings.min_ideas_for_clustering - 1 else None
 
-        # Create idea
+        # Create idea with explicit id (needed for batch processing to reference uncommitted ideas)
         idea = Idea(
+            id=str(uuid.uuid4()),
             session_id=str(batch_data.session_id),
             user_id=str(batch_data.user_id),
             raw_text=idea_item.raw_text,
