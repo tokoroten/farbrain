@@ -366,21 +366,14 @@ export const BrainstormSession = () => {
     }
   };
 
-  const handleAdminSubmit = async (e: React.FormEvent) => {
+  const handleClusterSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!sessionId) return;
 
     try {
-      const result = await api.auth.verifyAdmin(adminPassword);
-      if (!result.success) {
-        setError('管理者認証に失敗しました');
-        return;
-      }
-
       setClusteringInProgress(true);
       setShowAdminDialog(false);
-      setAdminPassword('');
 
       // Prepare fixed_cluster_count parameter
       const fixedCount = clusterMode === 'fixed' && fixedClusterCount
@@ -390,8 +383,6 @@ export const BrainstormSession = () => {
       await api.debug.forceCluster(sessionId, true, fixedCount);
 
       setError(null);
-      alert('クラスタリングが完了しました');
-      await fetchSessionData();
     } catch (err: any) {
       console.error('Failed to recalculate clustering:', err);
 
@@ -401,9 +392,8 @@ export const BrainstormSession = () => {
       } else {
         setError('クラスタリングの再計算に失敗しました');
       }
-    } finally {
-      setClusteringInProgress(false);
     }
+    // Note: clusteringInProgress will be set to false by WebSocket 'clustering_completed' event
   };
 
   if (isLoading) {
@@ -1011,27 +1001,10 @@ export const BrainstormSession = () => {
               クラスタ再計算設定
             </h2>
             <p style={{ marginBottom: '1.5rem', color: '#666' }}>
-              クラスタ再計算には管理者パスワードが必要です
+              クラスタ数の計算方法を選択してください
             </p>
 
-            <form onSubmit={handleAdminSubmit}>
-              <input
-                type="password"
-                value={adminPassword}
-                onChange={(e) => setAdminPassword(e.target.value)}
-                placeholder="管理者パスワード"
-                autoFocus
-                style={{
-                  width: '100%',
-                  padding: '0.75rem',
-                  border: '2px solid #e0e0e0',
-                  borderRadius: '0.5rem',
-                  fontSize: '1rem',
-                  marginBottom: '1rem',
-                  boxSizing: 'border-box',
-                }}
-              />
-
+            <form onSubmit={handleClusterSubmit}>
               <div style={{ marginBottom: '1rem' }}>
                 <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '600', fontSize: '0.875rem' }}>
                   クラスタ数の設定
@@ -1083,10 +1056,7 @@ export const BrainstormSession = () => {
               <div style={{ display: 'flex', gap: '0.5rem' }}>
                 <button
                   type="button"
-                  onClick={() => {
-                    setShowAdminDialog(false);
-                    setAdminPassword('');
-                  }}
+                  onClick={() => setShowAdminDialog(false)}
                   style={{
                     flex: 1,
                     padding: '0.75rem',
@@ -1101,15 +1071,15 @@ export const BrainstormSession = () => {
                 </button>
                 <button
                   type="submit"
-                  disabled={!adminPassword.trim()}
+                  disabled={clusteringInProgress}
                   style={{
                     flex: 1,
                     padding: '0.75rem',
-                    background: adminPassword.trim() ? '#667eea' : '#ccc',
+                    background: clusteringInProgress ? '#ccc' : '#667eea',
                     color: 'white',
                     border: 'none',
                     borderRadius: '0.5rem',
-                    cursor: adminPassword.trim() ? 'pointer' : 'not-allowed',
+                    cursor: clusteringInProgress ? 'not-allowed' : 'pointer',
                     fontWeight: '600',
                   }}
                 >
