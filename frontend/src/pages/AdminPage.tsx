@@ -38,6 +38,8 @@ export const AdminPage = () => {
   const [sessionFilter] = useState<'all' | 'active'>('all'); // Filter state (for future use)
   const [deleteConfirmSessionId, setDeleteConfirmSessionId] = useState<string | null>(null);
   const [deletingSessionId, setDeletingSessionId] = useState<string | null>(null);
+  const [resetConfirmSessionId, setResetConfirmSessionId] = useState<string | null>(null);
+  const [resettingSessionId, setResettingSessionId] = useState<string | null>(null);
   const [exportingSessionId, setExportingSessionId] = useState<string | null>(null);
   const [editingSession, setEditingSession] = useState<Session | null>(null);
   const [editForm, setEditForm] = useState({
@@ -109,6 +111,28 @@ export const AdminPage = () => {
       setError('セッションの削除に失敗しました');
     } finally {
       setDeletingSessionId(null);
+    }
+  };
+
+  const handleResetClick = (sessionId: string) => {
+    setResetConfirmSessionId(sessionId);
+  };
+
+  const handleConfirmReset = async () => {
+    if (!resetConfirmSessionId) return;
+
+    setResettingSessionId(resetConfirmSessionId);
+    setError(null);
+
+    try {
+      await api.sessions.reset(resetConfirmSessionId);
+      await fetchSessions();
+      setResetConfirmSessionId(null);
+    } catch (err) {
+      console.error('Failed to reset session:', err);
+      setError('セッションのリセットに失敗しました');
+    } finally {
+      setResettingSessionId(null);
     }
   };
 
@@ -691,6 +715,23 @@ export const AdminPage = () => {
                           {exportingSessionId === session.id ? 'エクスポート中...' : '📥 CSV'}
                         </button>
                         <button
+                          onClick={() => handleResetClick(session.id)}
+                          disabled={resettingSessionId === session.id}
+                          style={{
+                            padding: '0.4rem 0.75rem',
+                            background: resettingSessionId === session.id ? '#ccc' : '#ffc107',
+                            color: '#333',
+                            border: 'none',
+                            borderRadius: '0.4rem',
+                            fontSize: '0.8rem',
+                            cursor: resettingSessionId === session.id ? 'not-allowed' : 'pointer',
+                            fontWeight: '600',
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          {resettingSessionId === session.id ? 'リセット中...' : '🔄 リセット'}
+                        </button>
+                        <button
                           onClick={() => handleDeleteClick(session.id)}
                           disabled={deletingSessionId === session.id}
                           style={{
@@ -778,6 +819,83 @@ export const AdminPage = () => {
                     }}
                   >
                     {deletingSessionId !== null ? '削除中...' : '削除'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Reset confirmation dialog */}
+          {resetConfirmSessionId && (
+            <div style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              background: 'rgba(0,0,0,0.5)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 1000,
+            }}>
+              <div style={{
+                background: 'white',
+                padding: '1.25rem',
+                borderRadius: '0.75rem',
+                maxWidth: '400px',
+                width: '90%',
+              }}>
+                <h2 style={{ marginBottom: '0.75rem', fontSize: '1.25rem', fontWeight: 'bold' }}>
+                  セッションをリセット
+                </h2>
+                <p style={{ marginBottom: '0.5rem', color: '#666', fontSize: '0.9rem' }}>
+                  以下のデータが削除されます：
+                </p>
+                <ul style={{ marginBottom: '0.75rem', color: '#666', fontSize: '0.85rem', paddingLeft: '1.5rem' }}>
+                  <li>すべてのアイデア</li>
+                  <li>すべてのクラスタ</li>
+                  <li>ユーザーのスコア・投稿数（0にリセット）</li>
+                </ul>
+                <p style={{ marginBottom: '1rem', color: '#666', fontSize: '0.85rem' }}>
+                  ※ セッション設定・参加ユーザー・パスワードは維持されます
+                </p>
+
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <button
+                    type="button"
+                    onClick={() => setResetConfirmSessionId(null)}
+                    disabled={resettingSessionId !== null}
+                    style={{
+                      flex: 1,
+                      padding: '0.6rem',
+                      background: '#f0f0f0',
+                      border: 'none',
+                      borderRadius: '0.4rem',
+                      cursor: resettingSessionId !== null ? 'not-allowed' : 'pointer',
+                      fontWeight: '600',
+                      fontSize: '0.9rem',
+                    }}
+                  >
+                    キャンセル
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleConfirmReset}
+                    disabled={resettingSessionId !== null}
+                    style={{
+                      flex: 1,
+                      padding: '0.6rem',
+                      background: resettingSessionId !== null ? '#ccc' : '#ffc107',
+                      color: '#333',
+                      border: 'none',
+                      borderRadius: '0.4rem',
+                      cursor: resettingSessionId !== null ? 'not-allowed' : 'pointer',
+                      fontWeight: '600',
+                      fontSize: '0.9rem',
+                    }}
+                  >
+                    {resettingSessionId !== null ? 'リセット中...' : 'リセット'}
                   </button>
                 </div>
               </div>

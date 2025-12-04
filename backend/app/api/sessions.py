@@ -353,6 +353,64 @@ async def delete_session(
     return {"message": "Session deleted successfully", "session_id": session_id}
 
 
+@router.post("/{session_id}/reset")
+async def reset_session(
+    session_id: str,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """
+    Reset a session: delete all ideas and clusters, reset user scores.
+    Keeps session settings and users.
+    """
+    from sqlalchemy import delete as sql_delete, update as sql_update
+    from backend.app.services.clustering import clear_clustering_service
+
+    result = await db.execute(select(Session).where(Session.id == session_id))
+    session = result.scalar_one_or_none()
+
+    if not session:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Session not found"
+        )
+
+    # Delete clusters
+    await db.execute(
+        sql_delete(Cluster).where(Cluster.session_id == session_id)
+    )
+
+    # Delete ideas
+    await db.execute(
+        sql_delete(Idea).where(Idea.session_id == session_id)
+    )
+
+    # Reset user scores and idea counts
+    await db.execute(
+        sql_update(User)
+        .where(User.session_id == session_id)
+        .values(total_score=0.0, idea_count=0)
+    )
+
+    # Reset session's last_clustered_idea_count
+    session.last_clustered_idea_count = 0
+
+    await db.commit()
+
+    # Clear clustering service cache for this session
+    clear_clustering_service(session_id)
+
+    # Notify clients via WebSocket
+    await manager.broadcast_to_session(
+        session_id=session_id,
+        message={
+            "type": "session_reset",
+            "data": {"session_id": session_id}
+        }
+    )
+
+    return {"message": "Session reset successfully", "session_id": session_id}
+
+
 @router.get("/{session_id}/export")
 async def export_session_ideas(
     session_id: UUID,

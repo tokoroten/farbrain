@@ -102,6 +102,11 @@ export const api = {
       return response.data;
     },
 
+    reset: async (sessionId: string): Promise<{ message: string; session_id: string }> => {
+      const response = await apiClient.post(`/api/sessions/${sessionId}/reset`);
+      return response.data;
+    },
+
     export: async (sessionId: string): Promise<void> => {
       const response = await apiClient.get(`/api/sessions/${sessionId}/export`, {
         responseType: 'blob',
