@@ -35,7 +35,6 @@ export const BrainstormSession = () => {
   const [hoveredIdeaId, setHoveredIdeaId] = useState<string | null>(null);
   const [hoveredUserId, setHoveredUserId] = useState<string | null>(null);
   const [showAdminDialog, setShowAdminDialog] = useState(false);
-  const [adminPassword, setAdminPassword] = useState('');
   const [clusteringInProgress, setClusteringInProgress] = useState(false);
   const [clusterMode, setClusterMode] = useState<'auto' | 'fixed'>('auto');
   const [fixedClusterCount, setFixedClusterCount] = useState('');
@@ -484,25 +483,49 @@ export const BrainstormSession = () => {
             )}
           </div>
         </div>
-        <div style={{ position: 'relative' }}>
-          <button
-            onClick={() => setMenuOpen(!menuOpen)}
-            style={{
-              padding: '0.5rem 1rem',
-              background: '#f8f9fa',
-              color: '#333',
-              border: '1px solid #ddd',
-              borderRadius: '0.5rem',
-              cursor: 'pointer',
-              fontSize: '1rem',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.5rem',
-              fontWeight: '500',
-            }}
-          >
-            ☰ メニュー
-          </button>
+        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+          {/* Cluster Recalculation Button */}
+          {ideas.length >= 10 && (
+            <button
+              onClick={handleRecalculateClick}
+              disabled={clusteringInProgress}
+              style={{
+                padding: '0.5rem 1rem',
+                background: clusteringInProgress ? '#e0e0e0' : '#667eea',
+                color: clusteringInProgress ? '#999' : 'white',
+                border: 'none',
+                borderRadius: '0.5rem',
+                cursor: clusteringInProgress ? 'not-allowed' : 'pointer',
+                fontSize: '0.875rem',
+                fontWeight: '500',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.25rem',
+              }}
+            >
+              {clusteringInProgress ? '再計算中...' : '🔄 クラスタ再計算'}
+            </button>
+          )}
+
+          <div style={{ position: 'relative' }}>
+            <button
+              onClick={() => setMenuOpen(!menuOpen)}
+              style={{
+                padding: '0.5rem 1rem',
+                background: '#f8f9fa',
+                color: '#333',
+                border: '1px solid #ddd',
+                borderRadius: '0.5rem',
+                cursor: 'pointer',
+                fontSize: '1rem',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+                fontWeight: '500',
+              }}
+            >
+              ☰ メニュー
+            </button>
           {menuOpen && (
             <>
               <div
@@ -531,36 +554,6 @@ export const BrainstormSession = () => {
                   overflow: 'hidden',
                 }}
               >
-                {ideas.length >= 10 && (
-                  <button
-                    onClick={() => {
-                      handleRecalculateClick();
-                      setMenuOpen(false);
-                    }}
-                    disabled={clusteringInProgress}
-                    style={{
-                      width: '100%',
-                      padding: '0.75rem 1rem',
-                      background: 'white',
-                      color: clusteringInProgress ? '#999' : '#333',
-                      border: 'none',
-                      borderBottom: '1px solid #eee',
-                      cursor: clusteringInProgress ? 'not-allowed' : 'pointer',
-                      textAlign: 'left',
-                      fontWeight: '500',
-                    }}
-                    onMouseEnter={(e) => {
-                      if (!clusteringInProgress) {
-                        e.currentTarget.style.background = '#f5f5f5';
-                      }
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.background = 'white';
-                    }}
-                  >
-                    {clusteringInProgress ? '再計算中...' : '🔄 クラスタ再計算'}
-                  </button>
-                )}
                 <button
                   onClick={() => {
                     handleExportCSV();
@@ -663,6 +656,7 @@ export const BrainstormSession = () => {
               </div>
             </>
           )}
+          </div>
         </div>
       </div>
 
