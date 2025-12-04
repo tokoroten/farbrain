@@ -14,7 +14,6 @@ class TestSessionsAPI:
             json={
                 "title": "Test Session",
                 "description": "Test description",
-                "duration": 3600,
             }
         )
 
@@ -22,7 +21,6 @@ class TestSessionsAPI:
         data = response.json()
         assert data["title"] == "Test Session"
         assert data["description"] == "Test description"
-        assert data["duration"] == 3600
         assert data["status"] == "active"
         assert data["accepting_ideas"] is True
         assert "id" in data
@@ -35,7 +33,6 @@ class TestSessionsAPI:
             "/api/sessions/",
             json={
                 "title": "Protected Session",
-                "duration": 7200,
                 "password": "test123",
             }
         )
@@ -50,9 +47,7 @@ class TestSessionsAPI:
         """Test creating a session without required title."""
         response = await test_client_with_db.post(
             "/api/sessions/",
-            json={
-                "duration": 3600,
-            }
+            json={}
         )
 
         assert response.status_code == 422  # Validation error
@@ -72,11 +67,11 @@ class TestSessionsAPI:
         # Create two sessions
         await test_client_with_db.post(
             "/api/sessions/",
-            json={"title": "Session 1", "duration": 3600}
+            json={"title": "Session 1"}
         )
         await test_client_with_db.post(
             "/api/sessions/",
-            json={"title": "Session 2", "duration": 7200}
+            json={"title": "Session 2"}
         )
 
         response = await test_client_with_db.get("/api/sessions/")
@@ -91,7 +86,7 @@ class TestSessionsAPI:
         # Create an active session
         create_response = await test_client_with_db.post(
             "/api/sessions/",
-            json={"title": "Active Session", "duration": 3600}
+            json={"title": "Active Session"}
         )
         session_id = create_response.json()["id"]
 
@@ -111,7 +106,7 @@ class TestSessionsAPI:
         # Create a session
         create_response = await test_client_with_db.post(
             "/api/sessions/",
-            json={"title": "Test Session", "duration": 3600}
+            json={"title": "Test Session"}
         )
         session_id = create_response.json()["id"]
 
@@ -136,7 +131,7 @@ class TestSessionsAPI:
         # Create a session
         create_response = await test_client_with_db.post(
             "/api/sessions/",
-            json={"title": "Test Session", "duration": 3600}
+            json={"title": "Test Session"}
         )
         session_id = create_response.json()["id"]
 
@@ -146,7 +141,7 @@ class TestSessionsAPI:
         assert response.status_code == 200
         data = response.json()
         assert data["status"] == "ended"
-        assert data["ended_at"] is not None
+        # ended_at is not part of SessionResponse schema
 
     @pytest.mark.asyncio
     async def test_toggle_accepting_ideas(self, test_client_with_db):
@@ -154,7 +149,7 @@ class TestSessionsAPI:
         # Create a session
         create_response = await test_client_with_db.post(
             "/api/sessions/",
-            json={"title": "Test Session", "duration": 3600}
+            json={"title": "Test Session"}
         )
         session_id = create_response.json()["id"]
 
@@ -175,7 +170,6 @@ class TestSessionsAPI:
             "/api/sessions/",
             json={
                 "title": "Custom Prompt Session",
-                "duration": 3600,
                 "formatting_prompt": "Format this idea creatively",
                 "summarization_prompt": "Summarize this cluster briefly",
             }

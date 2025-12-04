@@ -1,7 +1,7 @@
 """Unit tests for LLMService."""
 
 import pytest
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, Mock, patch
 import httpx
 
 from backend.app.services.llm import (
@@ -36,15 +36,15 @@ class TestOpenAIProvider:
         """Test successful text generation."""
         provider = OpenAIProvider(api_key="test-key")
 
-        # Mock httpx.AsyncClient
-        mock_response = AsyncMock()
+        # Mock httpx.AsyncClient - use Mock for response since json() is sync
+        mock_response = Mock()
         mock_response.status_code = 200
         mock_response.json.return_value = {
             "choices": [
                 {"message": {"content": "Generated text response"}}
             ]
         }
-        mock_response.raise_for_status = AsyncMock()
+        mock_response.raise_for_status = Mock()
 
         with patch("httpx.AsyncClient") as mock_client:
             mock_client.return_value.__aenter__.return_value.post = AsyncMock(
@@ -60,11 +60,11 @@ class TestOpenAIProvider:
         """Test generation with system prompt."""
         provider = OpenAIProvider(api_key="test-key")
 
-        mock_response = AsyncMock()
+        mock_response = Mock()
         mock_response.json.return_value = {
             "choices": [{"message": {"content": "Response"}}]
         }
-        mock_response.raise_for_status = AsyncMock()
+        mock_response.raise_for_status = Mock()
 
         with patch("httpx.AsyncClient") as mock_client:
             mock_client.return_value.__aenter__.return_value.post = AsyncMock(
@@ -90,11 +90,11 @@ class TestOpenAIProvider:
         """Test generation with custom temperature and max_tokens."""
         provider = OpenAIProvider(api_key="test-key")
 
-        mock_response = AsyncMock()
+        mock_response = Mock()
         mock_response.json.return_value = {
             "choices": [{"message": {"content": "Response"}}]
         }
-        mock_response.raise_for_status = AsyncMock()
+        mock_response.raise_for_status = Mock()
 
         with patch("httpx.AsyncClient") as mock_client:
             mock_client.return_value.__aenter__.return_value.post = AsyncMock(
@@ -118,9 +118,9 @@ class TestOpenAIProvider:
         """Test generation with HTTP error."""
         provider = OpenAIProvider(api_key="test-key")
 
-        mock_response = AsyncMock()
+        mock_response = Mock()
         mock_response.raise_for_status.side_effect = httpx.HTTPStatusError(
-            "Error", request=AsyncMock(), response=AsyncMock()
+            "Error", request=Mock(), response=Mock()
         )
 
         with patch("httpx.AsyncClient") as mock_client:
@@ -152,16 +152,22 @@ class TestLLMService:
 
     def test_initialization_without_api_key(self):
         """Test LLMService initialization fails without API key."""
-        with patch.dict("os.environ", {}, clear=True):
+        from backend.app.core.config import settings
+        original_key = settings.openai_api_key
+        try:
+            settings.openai_api_key = ""
             with pytest.raises(ValueError, match="OPENAI_API_KEY not set"):
                 LLMService()
+        finally:
+            settings.openai_api_key = original_key
 
     @pytest.mark.asyncio
     async def test_format_idea_success(self):
         """Test successful idea formatting."""
+        import json
         mock_provider = AsyncMock(spec=OpenAIProvider)
         mock_provider.generate = AsyncMock(
-            return_value="リモートワークの全面的な導入により、通勤ストレスを削減し環境負荷を軽減する。"
+            return_value=json.dumps({"formatted_text": "リモートワークの全面的な導入により、通勤ストレスを削減し環境負荷を軽減する。"})
         )
 
         service = LLMService(provider=mock_provider)
@@ -193,23 +199,26 @@ class TestLLMService:
     @pytest.mark.asyncio
     async def test_format_idea_with_custom_prompt(self):
         """Test formatting with custom prompt."""
+        import json
         mock_provider = AsyncMock(spec=OpenAIProvider)
-        mock_provider.generate = AsyncMock(return_value="Formatted result")
+        mock_provider.generate = AsyncMock(return_value=json.dumps({"formatted_text": "Formatted result"}))
 
         service = LLMService(provider=mock_provider)
 
-        custom_prompt = "Custom format: {raw_text}"
+        custom_prompt = "Custom format instructions"
         await service.format_idea("Test idea", custom_prompt=custom_prompt)
 
-        # Verify custom prompt was used
+        # Verify custom prompt was used (custom_prompt + raw_text appended)
         call_args = mock_provider.generate.call_args
-        assert "Custom format: Test idea" in call_args.args[0]
+        assert "Custom format instructions" in call_args.args[0]
+        assert "Test idea" in call_args.args[0]
 
     @pytest.mark.asyncio
     async def test_format_idea_default_prompt(self):
         """Test formatting uses default prompt when no custom prompt provided."""
+        import json
         mock_provider = AsyncMock(spec=OpenAIProvider)
-        mock_provider.generate = AsyncMock(return_value="Formatted")
+        mock_provider.generate = AsyncMock(return_value=json.dumps({"formatted_text": "Formatted"}))
 
         service = LLMService(provider=mock_provider)
 
@@ -219,13 +228,15 @@ class TestLLMService:
         prompt = call_args.args[0]
 
         # Should contain default prompt elements
-        assert "原文: Test idea" in prompt
+        assert "以下のアイデアを整形してください" in prompt
+        assert "Test idea" in prompt
 
     @pytest.mark.asyncio
     async def test_summarize_cluster_success(self):
         """Test successful cluster summarization."""
+        import json
         mock_provider = AsyncMock(spec=OpenAIProvider)
-        mock_provider.generate = AsyncMock(return_value="リモートワーク関連")
+        mock_provider.generate = AsyncMock(return_value=json.dumps({"label": "リモートワーク関連"}))
 
         service = LLMService(provider=mock_provider)
 
@@ -253,8 +264,9 @@ class TestLLMService:
     @pytest.mark.asyncio
     async def test_summarize_cluster_with_custom_prompt(self):
         """Test summarization with custom prompt."""
+        import json
         mock_provider = AsyncMock(spec=OpenAIProvider)
-        mock_provider.generate = AsyncMock(return_value="Theme")
+        mock_provider.generate = AsyncMock(return_value=json.dumps({"label": "Theme"}))
 
         service = LLMService(provider=mock_provider)
 
@@ -273,10 +285,11 @@ class TestLLMService:
     @pytest.mark.asyncio
     async def test_summarize_cluster_long_label_truncation(self):
         """Test that long labels are truncated to 50 characters."""
+        import json
         mock_provider = AsyncMock(spec=OpenAIProvider)
         # Return a very long label
         long_label = "A" * 100
-        mock_provider.generate = AsyncMock(return_value=long_label)
+        mock_provider.generate = AsyncMock(return_value=json.dumps({"label": long_label}))
 
         service = LLMService(provider=mock_provider)
 
@@ -289,16 +302,17 @@ class TestLLMService:
     @pytest.mark.asyncio
     async def test_summarize_cluster_temperature(self):
         """Test that summarization uses lower temperature."""
+        import json
         mock_provider = AsyncMock(spec=OpenAIProvider)
-        mock_provider.generate = AsyncMock(return_value="Summary")
+        mock_provider.generate = AsyncMock(return_value=json.dumps({"label": "Summary"}))
 
         service = LLMService(provider=mock_provider)
 
         await service.summarize_cluster(["Idea 1"])
 
         call_args = mock_provider.generate.call_args
-        # Temperature should be 0.3 for consistency
-        assert call_args.kwargs.get("temperature") == 0.3
+        # Temperature should be 0.1 for consistency
+        assert call_args.kwargs.get("temperature") == 0.1
 
 
 class TestConvenienceFunctions:

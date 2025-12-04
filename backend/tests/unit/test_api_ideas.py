@@ -12,20 +12,21 @@ from backend.app.db.base import engine, Base
 @pytest.fixture(scope="function")
 async def mock_services():
     """Mock external services (LLM and embedding)."""
-    with patch("backend.app.api.ideas.llm_service") as mock_llm, \
-         patch("backend.app.api.ideas.embedding_service") as mock_embedding:
+    # Create mock service instances
+    mock_llm_instance = AsyncMock()
+    mock_llm_instance.format_idea = AsyncMock(
+        side_effect=lambda text, custom_prompt=None, session_context=None, similar_ideas=None: f"Formatted: {text}"
+    )
 
-        # Mock LLM format_idea to return formatted text
-        mock_llm.format_idea = AsyncMock(
-            side_effect=lambda text, custom_prompt=None: f"Formatted: {text}"
-        )
+    mock_embedding_instance = AsyncMock()
+    mock_embedding_instance.embed = AsyncMock(
+        side_effect=lambda text: np.random.rand(384).astype(np.float32)
+    )
 
-        # Mock embedding service to return deterministic embeddings
-        mock_embedding.embed = AsyncMock(
-            side_effect=lambda text: np.random.rand(384).astype(np.float32)
-        )
+    with patch("backend.app.api.ideas.get_llm_service", return_value=mock_llm_instance), \
+         patch("backend.app.api.ideas.get_embedding_service", return_value=mock_embedding_instance):
 
-        yield mock_llm, mock_embedding
+        yield mock_llm_instance, mock_embedding_instance
 
 
 @pytest.fixture(scope="function")
@@ -47,7 +48,7 @@ async def test_session(test_client):
     """Create a test session."""
     response = await test_client.post(
         "/api/sessions/",
-        json={"title": "Test Session", "duration": 3600}
+        json={"title": "Test Session"}
     )
     return response.json()
 

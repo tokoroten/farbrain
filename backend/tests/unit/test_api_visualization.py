@@ -12,20 +12,21 @@ from backend.app.db.base import engine, Base
 @pytest.fixture(scope="function")
 async def mock_services():
     """Mock external services (LLM and embedding)."""
-    with patch("backend.app.api.ideas.llm_service") as mock_llm, \
-         patch("backend.app.api.ideas.embedding_service") as mock_embedding:
+    # Create mock service instances
+    mock_llm_instance = AsyncMock()
+    mock_llm_instance.format_idea = AsyncMock(
+        side_effect=lambda text, custom_prompt=None, session_context=None, similar_ideas=None: f"Formatted: {text}"
+    )
 
-        # Mock LLM format_idea to return formatted text
-        mock_llm.format_idea = AsyncMock(
-            side_effect=lambda text, custom_prompt=None: f"Formatted: {text}"
-        )
+    mock_embedding_instance = AsyncMock()
+    mock_embedding_instance.embed = AsyncMock(
+        side_effect=lambda text: np.random.rand(384).astype(np.float32)
+    )
 
-        # Mock embedding service to return deterministic embeddings
-        mock_embedding.embed = AsyncMock(
-            side_effect=lambda text: np.random.rand(384).astype(np.float32)
-        )
+    with patch("backend.app.api.ideas.get_llm_service", return_value=mock_llm_instance), \
+         patch("backend.app.api.ideas.get_embedding_service", return_value=mock_embedding_instance):
 
-        yield mock_llm, mock_embedding
+        yield mock_llm_instance, mock_embedding_instance
 
 
 @pytest.fixture(scope="function")
@@ -47,7 +48,7 @@ async def test_session(test_client):
     """Create a test session."""
     response = await test_client.post(
         "/api/sessions/",
-        json={"title": "Test Session", "duration": 3600}
+        json={"title": "Test Session"}
     )
     return response.json()
 
@@ -108,8 +109,10 @@ class TestVisualizationAPI:
     async def test_get_visualization_empty_session(self, test_client, test_session):
         """Test getting visualization data for a session with no ideas."""
         session_id = test_session["id"]
+        # Create a dummy user_id for the query parameter
+        dummy_user_id = "00000000-0000-0000-0000-000000000001"
 
-        response = await test_client.get(f"/api/visualization/{session_id}")
+        response = await test_client.get(f"/api/visualization/{session_id}?user_id={dummy_user_id}")
 
         assert response.status_code == 200
         data = response.json()
@@ -122,8 +125,9 @@ class TestVisualizationAPI:
     async def test_get_visualization_with_ideas(self, test_client, test_ideas):
         """Test getting visualization data for a session with ideas."""
         session_id = test_ideas["session_id"]
+        user_id = test_ideas["users"][0]["user_id"]
 
-        response = await test_client.get(f"/api/visualization/{session_id}")
+        response = await test_client.get(f"/api/visualization/{session_id}?user_id={user_id}")
 
         assert response.status_code == 200
         data = response.json()
@@ -157,8 +161,9 @@ class TestVisualizationAPI:
     @pytest.mark.asyncio
     async def test_get_visualization_nonexistent_session(self, test_client):
         """Test getting visualization data for a non-existent session."""
+        dummy_user_id = "00000000-0000-0000-0000-000000000001"
         response = await test_client.get(
-            "/api/visualization/00000000-0000-0000-0000-000000000000"
+            f"/api/visualization/00000000-0000-0000-0000-000000000000?user_id={dummy_user_id}"
         )
 
         assert response.status_code == 404
@@ -167,7 +172,8 @@ class TestVisualizationAPI:
     @pytest.mark.asyncio
     async def test_get_visualization_invalid_session_id(self, test_client):
         """Test getting visualization data with invalid session ID format."""
-        response = await test_client.get("/api/visualization/invalid-uuid")
+        dummy_user_id = "00000000-0000-0000-0000-000000000001"
+        response = await test_client.get(f"/api/visualization/invalid-uuid?user_id={dummy_user_id}")
 
         assert response.status_code == 422  # Validation error
 
@@ -176,8 +182,9 @@ class TestVisualizationAPI:
         """Test that visualization data includes correct user names."""
         session_id = test_ideas["session_id"]
         users = test_ideas["users"]
+        user_id = users[0]["user_id"]
 
-        response = await test_client.get(f"/api/visualization/{session_id}")
+        response = await test_client.get(f"/api/visualization/{session_id}?user_id={user_id}")
 
         assert response.status_code == 200
         data = response.json()
@@ -314,9 +321,10 @@ class TestVisualizationIntegration:
     async def test_visualization_and_scoreboard_consistency(self, test_client, test_ideas):
         """Test that visualization and scoreboard data are consistent."""
         session_id = test_ideas["session_id"]
+        user_id = test_ideas["users"][0]["user_id"]
 
         # Get both visualization and scoreboard
-        viz_response = await test_client.get(f"/api/visualization/{session_id}")
+        viz_response = await test_client.get(f"/api/visualization/{session_id}?user_id={user_id}")
         scoreboard_response = await test_client.get(f"/api/visualization/{session_id}/scoreboard")
 
         assert viz_response.status_code == 200

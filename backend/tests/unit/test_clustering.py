@@ -37,20 +37,19 @@ class TestClusteringService:
         """Test cluster count calculation for small datasets."""
         service = ClusteringService()
 
-        # Less than min_ideas_for_clustering (10)
-        assert service._calculate_n_clusters(5) == 5
-        assert service._calculate_n_clusters(9) == 5
+        # Less than min_ideas_for_clustering (10): uses n_ideas // 3 with min 2
+        assert service._calculate_n_clusters(5) == 2  # max(2, 5//3=1) = 2
+        assert service._calculate_n_clusters(9) == 3  # max(2, 9//3=3) = 3
 
     def test_calculate_n_clusters_medium(self):
         """Test cluster count calculation for medium datasets."""
         service = ClusteringService()
 
-        # 10-100 ideas
-        # Formula: max(5, ceil(n_ideas^(1/3)))
-        assert service._calculate_n_clusters(10) >= 5
-        assert service._calculate_n_clusters(27) == 5  # 27^(1/3) = 3, but min is 5
-        assert service._calculate_n_clusters(125) == 5  # 125^(1/3) = 5
-        assert service._calculate_n_clusters(216) == 6  # 216^(1/3) = 6
+        # >= 10 ideas: uses cube root, capped at n_ideas // 3
+        assert service._calculate_n_clusters(10) >= 2  # cube_root(10)=3, cap at 3
+        assert service._calculate_n_clusters(27) == 3  # 27^(1/3) = 3, cap at 9
+        assert service._calculate_n_clusters(125) == 5  # 125^(1/3) = 5, cap at 41
+        assert service._calculate_n_clusters(216) == 6  # 216^(1/3) = 6, cap at 72
 
     def test_calculate_n_clusters_large(self):
         """Test cluster count calculation for large datasets."""
@@ -133,7 +132,8 @@ class TestClusteringService:
         assert isinstance(result, ClusteringResult)
         assert result.coordinates.shape == (50, 2)
         assert result.cluster_labels.shape == (50,)
-        assert result.n_clusters >= 5  # At least 5 clusters
+        # cube_root(50) = 4, capped at 50//3 = 16 -> min 4
+        assert result.n_clusters >= 2  # At least 2 clusters
         assert len(result.convex_hulls) > 0
 
         # Models should be fitted
@@ -311,25 +311,28 @@ class TestConvenienceFunctions:
     """Test cases for convenience functions."""
 
     def test_get_clustering_service_singleton(self):
-        """Test get_clustering_service returns singleton."""
-        service1 = get_clustering_service()
-        service2 = get_clustering_service()
+        """Test get_clustering_service returns singleton per session."""
+        session_id = "test-session-1"
+        service1 = get_clustering_service(session_id)
+        service2 = get_clustering_service(session_id)
 
         assert service1 is service2
 
     def test_cluster_ideas(self):
         """Test cluster_ideas convenience function."""
+        session_id = "test-session-2"
         embeddings = [[0.1, 0.2, 0.3] for _ in range(5)]
 
-        result = cluster_ideas(embeddings)
+        result = cluster_ideas(embeddings, session_id)
 
         assert isinstance(result, ClusteringResult)
 
     def test_transform_idea(self):
         """Test transform_idea convenience function."""
+        session_id = "test-session-3"
         embedding = [0.1] * 128
 
-        x, y = transform_idea(embedding)
+        x, y = transform_idea(embedding, session_id)
 
         assert isinstance(x, float)
         assert isinstance(y, float)

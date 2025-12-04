@@ -54,15 +54,15 @@ class TestMinDistanceTransform:
         """Should return low score if one idea is very similar."""
         similarities = np.array([0.95, 0.1, 0.2])
         result = min_distance_transform(similarities)
-        # min distance = 0.05, score = 2.5
-        assert pytest.approx(result, rel=1e-2) == 2.5
+        # min distance = 0.05, score = (0.05^2) * 300 = 0.75
+        assert pytest.approx(result, rel=1e-2) == 0.75
 
     def test_all_dissimilar(self):
         """Should return high score if all are dissimilar."""
         similarities = np.array([0.1, 0.2, 0.15])
         result = min_distance_transform(similarities)
-        # min distance = 0.8, score = 40
-        assert pytest.approx(result, rel=1e-2) == 40.0
+        # min distance = 0.8, score = (0.8^2) * 300 = 192 -> capped at 100
+        assert pytest.approx(result, rel=1e-2) == 100.0
 
 
 class TestExponentialDistanceTransform:
