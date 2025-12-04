@@ -1,5 +1,90 @@
 ## 最近の実装と改善
 
+### クラスタリング状態インジケーター (2025-12-05)
+
+**機能概要:**
+- バックエンドでクラスタリングが実行中であることをユーザーに通知
+- WebSocket経由で `clustering_started` / `clustering_completed` イベントを送信
+- ヘッダーに黄色のインジケーター「クラスタリング中...」を表示
+
+**実装箇所:**
+
+1. **バックエンド - WebSocket Manager** (`backend/app/websocket/manager.py`)
+   - `send_clustering_started()` メソッド追加
+   - `send_clustering_completed()` メソッド追加
+
+2. **バックエンド - クラスタリング処理** (`backend/app/api/ideas.py`, `backend/app/api/debug.py`)
+   - `full_recluster_session()` でクラスタリング開始/完了時に通知送信
+   - `force_cluster()` エンドポイントでも同様に通知送信
+
+3. **フロントエンド - BrainstormSession** (`frontend/src/pages/BrainstormSession.tsx`)
+   - WebSocketメッセージハンドラに `clustering_started` / `clustering_completed` を追加
+   - `clusteringInProgress` 状態でヘッダーにインジケーター表示
+
+4. **フロントエンド - 型定義** (`frontend/src/types/api.ts`)
+   - `WebSocketEvent` 型に `clustering_started` / `clustering_completed` を追加
+
+---
+
+### バッチアイデア投稿API (2025-12-05)
+
+**機能概要:**
+- AI変種モードで複数アイデアを一括投稿するAPI
+- 並列リクエストによるレース条件を回避
+
+**実装箇所:**
+
+1. **バックエンド - スキーマ** (`backend/app/schemas/idea.py`)
+   - `IdeaBatchItem`, `IdeaBatchCreate`, `IdeaBatchResponse` を追加
+
+2. **バックエンド - API** (`backend/app/api/ideas.py`)
+   - `POST /api/ideas/batch` エンドポイント追加
+   - 各アイデアを順次処理してDB保存
+
+3. **フロントエンド - APIクライアント** (`frontend/src/lib/api.ts`)
+   - `api.ideas.createBatch()` メソッド追加
+
+4. **フロントエンド - IdeaInput** (`frontend/src/components/IdeaInput.tsx`)
+   - `onBatchSubmit` プロップ追加、バッチ投稿に対応
+
+**注意点:**
+- バッチ処理では明示的にUUIDを生成してアイデアIDを設定（`id=str(uuid4())`）
+- これにより `closest_idea_id` が文字列 'None' になる問題を回避
+
+---
+
+### セッションリセット機能 (2025-12-05)
+
+**機能概要:**
+- 管理画面からセッションをリセット（アイデア・クラスタ削除、スコアリセット）
+- セッション設定とユーザーは維持
+
+**実装箇所:**
+
+1. **バックエンド - API** (`backend/app/api/sessions.py`)
+   - `POST /api/sessions/{session_id}/reset` エンドポイント追加
+   - クラスタ削除、アイデア削除、ユーザースコアリセット
+   - WebSocketで `session_reset` イベント送信
+
+2. **フロントエンド - AdminPage** (`frontend/src/pages/AdminPage.tsx`)
+   - リセットボタンと確認ダイアログを追加
+
+---
+
+### クラスタ再計算ボタンの改善 (2025-12-05)
+
+**変更点:**
+- 管理者パスワード認証を削除（誰でも実行可能に）
+- メニュー内からヘッダーに独立ボタンとして移動
+- クラスタ数設定（自動/固定）のダイアログは維持
+
+**実装箇所:**
+- `frontend/src/pages/BrainstormSession.tsx`
+  - `handleClusterSubmit()` からパスワード認証を削除
+  - ヘッダー右側に紫色のボタンとして配置
+
+---
+
 ### LLM自動整形のスキップ機能 (2025-01-27)
 
 **機能概要:**
